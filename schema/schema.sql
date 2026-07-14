@@ -79,6 +79,15 @@ CREATE TABLE regle_prelevement (
     taux                REAL,                   -- pour type_regle = 'taux_fixe' (ex : 0.20 pour 20%)
     montant_fixe        REAL,                   -- pour type_regle = 'montant_fixe'
     formule             TEXT,                   -- pour type_regle = 'formule' (interprétée par le moteur applicatif)
+    -- assiette : uniquement significatif pour type_regle = 'taux_fixe'.
+    --   'base_directe' : le taux s'applique tel quel sur la base fournie
+    --                    (ex : cotisation calculée sur un salaire brut).
+    --   'ttc_inclus'   : la base fournie est un montant TTC qui CONTIENT déjà
+    --                    le prélèvement ; le moteur doit l'extraire
+    --                    (ex : TVA lue sur un ticket de caisse, où le prix
+    --                    affiché est toutes taxes comprises).
+    assiette            TEXT NOT NULL DEFAULT 'base_directe' CHECK (assiette IN
+                            ('base_directe', 'ttc_inclus')),
     source_reference    TEXT NOT NULL,          -- lien ou référence légale précise de CETTE version du taux
     commentaire         TEXT,
 
