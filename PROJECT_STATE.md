@@ -10,7 +10,10 @@
 
 ## Modules terminés
 - [x] Lot 1 : schéma BDD (schema/schema.sql) + doc architecture (docs/architecture.md)
-- [x] Lot 2 : moteur de règles applicatif (fiscal_engine/) — 14/14 tests unitaires passent (tests/test_engine.py)
+- [x] Lot 2 : moteur de règles applicatif (fiscal_engine/) — 15/15 tests unitaires passent
+- [x] Correctif TVA-sur-TTC : ajout colonne `assiette` (base_directe / ttc_inclus) sur
+  regle_prelevement ; calculator.py distingue maintenant application directe (ex : cotisation
+  sur salaire brut) et extraction depuis un montant TTC (ex : TVA sur ticket de caisse)
 
 ## Points ouverts / à trancher au lot fiscal FR
 - TVA sur ticket de caisse : le montant de ligne est TTC, il faudra extraire la TVA
@@ -22,4 +25,4 @@
 - [ ] Lot 3 : contenu fiscal France (TVA, CSG/CRDS, cotisations, IR réel, taxes écologiques)
 
 ## Prochaine étape
-Lot 3, ou lot d'ajustement TVA-sur-TTC si tu préfères le corriger avant d'aller plus loin
+Lot 3 : contenu fiscal France
