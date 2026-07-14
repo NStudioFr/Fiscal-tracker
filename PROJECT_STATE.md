@@ -4,14 +4,22 @@
 - BDD locale : SQLite
 - Langage moteur applicatif : Python
 - Moteur de règles : versioning des taux par date_debut/date_fin, sourcé (reference_legale)
-- Extensibilité pays : table `pays` + colonne `pays_code` sur `prelevement` (pas de nouvelle table par pays)
-- Catégories produit : taxonomie fiscale maison, pas de dépendance à une base produit exhaustive non-alimentaire (Open Products Facts trop pauvre)
+- Extensibilité pays : table `pays` + colonne `pays_code` sur `prelevement`
+- Formules : interprétées via un sous-ensemble sécurisé du module `ast` (jamais eval() libre)
+- Catégories produit : taxonomie fiscale maison (Open Products Facts trop pauvre)
 
 ## Modules terminés
-- [x] Lot 1 : schéma BDD (schema/schema.sql) + doc architecture (docs/architecture.md) — validé par chargement SQLite
+- [x] Lot 1 : schéma BDD (schema/schema.sql) + doc architecture (docs/architecture.md)
+- [x] Lot 2 : moteur de règles applicatif (fiscal_engine/) — 14/14 tests unitaires passent (tests/test_engine.py)
+
+## Points ouverts / à trancher au lot fiscal FR
+- TVA sur ticket de caisse : le montant de ligne est TTC, il faudra extraire la TVA
+  incluse (montant_TTC - montant_TTC/(1+taux)) plutôt que taux x montant directement.
+  Le calculator.py actuel applique taux x base tel quel (correct pour une fiche de paie,
+  À CORRIGER pour les achats avant le lot OCR/parsing).
 
 ## Modules en cours
-- [ ] Lot 2 : moteur de règles applicatif (Python)
+- [ ] Lot 3 : contenu fiscal France (TVA, CSG/CRDS, cotisations, IR réel, taxes écologiques)
 
 ## Prochaine étape
-Lot 2 : moteur de résolution de règle par date + interpréteur de formules + agrégation pour rapports
+Lot 3, ou lot d'ajustement TVA-sur-TTC si tu préfères le corriger avant d'aller plus loin
