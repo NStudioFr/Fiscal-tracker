@@ -37,7 +37,8 @@ INSERT INTO typologie_prelevement (code, libelle_fr, libelle_en, libelle_es) VAL
     ('TVA',          'Taxe sur la valeur ajoutée',      'Value Added Tax',        'Impuesto sobre el Valor Añadido'),
     ('COTIS_SOC',    'Cotisations sociales',            'Social contributions',   'Cotizaciones sociales'),
     ('IMPOT_REVENU', 'Impôt sur le revenu',             'Income tax',             'Impuesto sobre la renta'),
-    ('TAXE_ECO',     'Taxes écologiques / énergétiques','Environmental/energy taxes', 'Impuestos ecológicos/energéticos');
+    ('TAXE_ECO',     'Taxes écologiques / énergétiques','Environmental/energy taxes', 'Impuestos ecológicos/energéticos'),
+    ('IMPOTS_LOCAUX','Impôts locaux',                   'Local taxes',            'Impuestos locales');
 
 -- -------------------------------------------------------------------------
 -- Types de dépense (axe de ventilation n°2)
@@ -45,6 +46,8 @@ INSERT INTO typologie_prelevement (code, libelle_fr, libelle_en, libelle_es) VAL
 INSERT INTO type_depense (code, libelle_fr, libelle_en, libelle_es) VALUES
     ('ALIMENTATION', 'Alimentation',        'Food',           'Alimentación'),
     ('CARBURANT',    'Carburant',           'Fuel',           'Combustible'),
+    ('ENERGIE',      'Énergie du logement (gaz, électricité)', 'Home energy (gas, electricity)', 'Energía del hogar (gas, electricidad)'),
+    ('LOGEMENT',     'Logement (taxes et impôts locaux)', 'Housing (local taxes)', 'Vivienda (impuestos locales)'),
     ('SALAIRE',      'Salaire',             'Salary',         'Salario'),
     ('AUTRE',        'Autres dépenses',     'Other expenses', 'Otros gastos');
 
@@ -238,6 +241,63 @@ SELECT id, '2026-01-01', NULL, 'montant_par_unite', 0.5940, 'L',
 FROM prelevement WHERE code = 'TICPE_GAZOLE';
 
 -- =========================================================================
+-- TICGN — accise sur le gaz naturel (chauffage domestique)
+-- =========================================================================
+-- Assise en €/MWh, ce qui en fait un deuxième exemple naturel de prélèvement
+-- de type 'montant_par_unite' (au-delà du carburant), pour la consommation
+-- énergétique courante d'un particulier (chauffage, eau chaude, cuisson).
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'TICGN', 'Accise sur le gaz naturel (ex-TICGN)', 'Natural gas excise duty (former TICGN)', 'Impuesto especial sobre el gas natural',
+       'Consommation en MWh (ou kWh, converti automatiquement)', 'Art. 266 quinquies du code des douanes / Code des impositions sur les biens et services'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference, commentaire)
+SELECT id, '2026-02-01', NULL, 'montant_par_unite', 16.39, 'MWh',
+       'BOFiP, taux normal applicable au 01/02/2026 pour un usage combustible ménager (sources concordantes : Opéra Energie, Fiscalead, Selectra)',
+       'Taux ménages/usage combustible. Ne couvre pas le taux réduit GNV (5,23 €/MWh, usage carburant) ni les taux réduits industriels.'
+FROM prelevement WHERE code = 'TICGN';
+
+-- =========================================================================
+-- Impôts locaux — taxe foncière et taxe d'habitation sur les résidences
+-- secondaires (THRS)
+-- =========================================================================
+-- Ces deux impôts n'ont PAS de taux national : la base (valeur locative
+-- cadastrale) est nationale, mais le taux appliqué est voté par chaque
+-- commune/EPCI/département et varie donc fortement d'un endroit à l'autre.
+-- Le moteur ne peut donc pas les calculer — leur montant, déjà déterminé
+-- par l'administration fiscale, est lu directement sur l'avis d'imposition
+-- (type_regle = 'montant_declare', voir schema.sql et calculator.py).
+--
+-- Rappel important (vérifié) : la taxe d'habitation sur la RÉSIDENCE
+-- PRINCIPALE est supprimée depuis le 1er janvier 2023 pour tous les
+-- contribuables. Elle ne subsiste que sur les résidences secondaires (THRS).
+-- Ne pas modéliser de "taxe d'habitation résidence principale" comme si
+-- elle existait encore.
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'TAXE_FONCIERE', 'Taxe foncière sur les propriétés bâties', 'Property tax (built properties)', 'Impuesto sobre bienes inmuebles (construidos)',
+       'Montant lu directement sur l''avis de taxe foncière (taux voté par la commune/EPCI/département, non modélisable nationalement)',
+       'Art. 1380 et s. CGI'
+FROM typologie_prelevement WHERE code = 'IMPOTS_LOCAUX';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'TAXE_HABITATION_RESIDENCE_SECONDAIRE', 'Taxe d''habitation sur une résidence secondaire (THRS)', 'Housing tax on secondary residences', 'Impuesto de vivienda sobre residencias secundarias',
+       'Montant lu directement sur l''avis de THRS (taux voté localement, majoration possible en zone tendue, non modélisable nationalement)',
+       'Art. 1407 et s. CGI — la taxe d''habitation sur la résidence principale est supprimée depuis le 01/01/2023'
+FROM typologie_prelevement WHERE code = 'IMPOTS_LOCAUX';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'montant_declare',
+       'Art. 1380 et s. CGI — taux fixé annuellement par chaque collectivité, aucun taux national',
+       'Montant à saisir tel qu''affiché sur l''avis de taxe foncière, aucun calcul effectué par le moteur'
+FROM prelevement WHERE code = 'TAXE_FONCIERE';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'montant_declare',
+       'Art. 1407 et s. CGI — taux fixé annuellement par chaque collectivité, aucun taux national ; majoration possible de 5 à 60% en zone tendue',
+       'Montant à saisir tel qu''affiché sur l''avis de THRS, aucun calcul effectué par le moteur ; ne s''applique qu''aux résidences secondaires depuis 2023'
+FROM prelevement WHERE code = 'TAXE_HABITATION_RESIDENCE_SECONDAIRE';
+
+-- =========================================================================
 -- Catégories produit d'exemple (mapping non exhaustif — illustration du
 -- mécanisme, à compléter dans un lot dédié "catégorisation produits")
 -- =========================================================================
@@ -261,6 +321,10 @@ INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_de
 SELECT 'CARBURANT_GAZOLE', 'Carburant gazole', 'Diesel fuel', 'Gasóleo', id
 FROM type_depense WHERE code = 'CARBURANT';
 
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'GAZ_NATUREL_CHAUFFAGE', 'Gaz naturel (chauffage/cuisson)', 'Natural gas (heating/cooking)', 'Gas natural (calefacción/cocina)', id
+FROM type_depense WHERE code = 'ENERGIE';
+
 -- Mapping catégorie -> prélèvement(s) applicable(s) :
 --   - Alimentation générale (produits de base non transformés type pâtes,
 --     riz, légumes...) -> TVA taux réduit 5,5%
@@ -272,6 +336,7 @@ FROM type_depense WHERE code = 'CARBURANT';
 --     cumulés sur la même ligne, chacun avec sa propre assiette : montant
 --     pour la TVA, quantité en litres pour la TICPE)
 --   - Carburant gazole -> TVA 20% + TICPE gazole
+--   - Gaz naturel -> TVA 20% + TICGN (quantité en kWh/MWh)
 INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
 SELECT cp.id, p.id FROM categorie_produit cp, prelevement p
 WHERE cp.code = 'ALIMENTATION_GENERALE' AND p.code = 'TVA_REDUIT';
@@ -299,6 +364,14 @@ WHERE cp.code = 'CARBURANT_GAZOLE' AND p.code = 'TVA_NORMAL';
 INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
 SELECT cp.id, p.id FROM categorie_produit cp, prelevement p
 WHERE cp.code = 'CARBURANT_GAZOLE' AND p.code = 'TICPE_GAZOLE';
+
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p
+WHERE cp.code = 'GAZ_NATUREL_CHAUFFAGE' AND p.code = 'TVA_NORMAL';
+
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p
+WHERE cp.code = 'GAZ_NATUREL_CHAUFFAGE' AND p.code = 'TICGN';
 
 -- =========================================================================
 -- Fin du contenu fiscal — Lot 3
