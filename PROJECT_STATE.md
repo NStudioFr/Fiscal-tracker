@@ -12,13 +12,16 @@
 
 ## Modules terminés
 - [x] Lot 1 : schéma BDD + doc architecture
-- [x] Lot 2 : moteur de règles applicatif — 21/21 tests unitaires passent
+- [x] Lot 2 : moteur de règles applicatif — 27/27 tests unitaires passent
 - [x] Correctif TVA-sur-TTC
 - [x] Extension quantité/unité (montant_par_unite + units.py)
-- [x] Lot 3 : contenu fiscal France — TVA (4 taux), CSG/CRDS + cotisation vieillesse
-  salariale, barème IR 2026, TICPE essence/gazole (seed_data/fr_seed_lot3.sql)
-  — validé contre 3 exemples officiels (IR : 2103,99€ sur 30000€/1part ; TICPE :
-  5,94€/10L gazole ; cumul TVA+TICPE sur une ligne carburant)
+- [x] Lot 3 : contenu fiscal France (TVA, CSG/CRDS, cotisation vieillesse, IR, TICPE)
+- [x] Plafonnement générique (Point 1 de l'ordre de traitement) : nouvelles tables
+  parametre_reference / valeur_parametre_reference + module fiscal_engine/parameters.py.
+  Réutilise le moteur de formules existant (pas de colonne "plafond" dédiée).
+  CSG/CRDS et cotisation vieillesse plafonnée recalculées avec seuils réels (PMSS,
+  4×PMSS) — validé sur un cas de haut salaire (20000€/mois) où le plafonnement change
+  effectivement le résultat par rapport à un calcul non plafonné.
 
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
@@ -27,7 +30,6 @@
 - Régime des indépendants non couvert
 - Mapping catégorie produit → prélèvement encore très partiel (5 catégories d'exemple)
 
-## Prochaine étape
-Au choix : élargir le mapping catégories produit (lot dédié), démarrer l'OCR/parsing
-de documents, ou ajouter d'autres prélèvements FR (taxe foncière, CSG sur autres
-revenus, régime indépendant...)
+## Prochaine étape (ordre convenu)
+Point 2 : taxes écologiques par quantité (déjà en grande partie fait via TICPE) +
+taxe foncière/habitation (lignes à prélèvement explicite, type fiche de paie)
