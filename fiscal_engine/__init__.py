@@ -6,9 +6,12 @@ Modules :
     calculator    — calcul du montant à partir d'une règle résolue
     formula       — interpréteur sécurisé pour les règles de type 'formule'
     units         — conversions d'unités pour les règles de type 'montant_par_unite'
+    parameters    — résolution des paramètres de référence versionnés (PMSS, etc.),
+                    utilisables comme variables dans une règle de type 'formule'
+                    (mécanisme générique de plafonnement/seuil, sans colonne dédiée)
     orchestrator  — orchestration complète pour une ligne de document
     aggregator    — requêtes de reporting (totaux, ventilations)
     exceptions    — exceptions spécifiques au moteur
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
