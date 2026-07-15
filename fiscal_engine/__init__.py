@@ -9,9 +9,12 @@ Modules :
     parameters    — résolution des paramètres de référence versionnés (PMSS, etc.),
                     utilisables comme variables dans une règle de type 'formule'
                     (mécanisme générique de plafonnement/seuil, sans colonne dédiée)
+    foyer         — calcul de l'impôt sur le revenu d'un foyer complet : quotient
+                    familial, plafonnement de son avantage, décote (orchestration
+                    de haut niveau au-dessus du moteur générique)
     orchestrator  — orchestration complète pour une ligne de document
     aggregator    — requêtes de reporting (totaux, ventilations)
     exceptions    — exceptions spécifiques au moteur
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
