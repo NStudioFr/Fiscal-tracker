@@ -11,12 +11,13 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fiscal_engine import db, resolver, calculator, orchestrator, aggregator, formula
+from fiscal_engine import db, resolver, calculator, orchestrator, aggregator, formula, units
 from fiscal_engine.exceptions import (
     AucuneRegleApplicable,
     ReglesChevauchantes,
     FormuleInvalide,
     DonneesBaremeManquantes,
+    UniteIncompatible,
 )
 
 CHEMIN_SCHEMA = Path(__file__).resolve().parent.parent / "schema" / "schema.sql"
@@ -133,6 +134,23 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
         (id_prelevement_cotis,),
     )
 
+    # Prélèvement de test en mode 'montant_par_unite' (type TICPE : montant
+    # fixe par litre, pas un pourcentage d'un montant).
+    conn.execute(
+        """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
+           VALUES ('FR', ?, 'TICPE_TEST', 'TICPE de test', 'Test - montant par unite')""",
+        (id_typo_ir,),  # typologie réutilisée par simplicité, sans incidence sur le test
+    )
+    id_prelevement_ticpe = conn.execute(
+        "SELECT id FROM prelevement WHERE code = 'TICPE_TEST'"
+    ).fetchone()["id"]
+    conn.execute(
+        """INSERT INTO regle_prelevement
+           (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+           VALUES (?, '2026-01-01', NULL, 'montant_par_unite', 0.6829, 'L', 'Test - 0.6829 EUR/L')""",
+        (id_prelevement_ticpe,),
+    )
+
     conn.execute(
         """INSERT INTO categorie_produit (code, libelle_fr, type_depense_id)
            VALUES ('EPICERIE_SALEE', 'Épicerie salée', ?)""",
@@ -151,6 +169,7 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
         "id_prelevement_tva": id_prelevement_tva,
         "id_prelevement_ir": id_prelevement_ir,
         "id_prelevement_cotis": id_prelevement_cotis,
+        "id_prelevement_ticpe": id_prelevement_ticpe,
         "id_categorie": id_categorie,
     }
 
@@ -197,7 +216,7 @@ class TestCalculator(unittest.TestCase):
         # TVA : la base est un montant TTC (10€), il faut EXTRAIRE la TVA incluse,
         # pas l'ajouter par-dessus. 10 / 1.20 = 8.3333 (HT) ; TVA incluse = 1.6667
         regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_tva"], "2026-01-01")
-        resultat = calculator.calculer_montant(self.conn, regle, base=10.0)
+        resultat = calculator.calculer_montant(self.conn, regle, montant=10.0)
         self.assertAlmostEqual(resultat["montant"], 1.6666666667, places=6)
         self.assertAlmostEqual(resultat["base_calcul"], 8.3333333333, places=6)
         self.assertAlmostEqual(resultat["taux_applique"], 0.20)
@@ -205,7 +224,7 @@ class TestCalculator(unittest.TestCase):
     def test_calcul_taux_fixe_base_directe(self):
         # Cotisation sur salaire brut : le taux s'applique tel quel sur la base.
         regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_cotis"], "2026-01-01")
-        resultat = calculator.calculer_montant(self.conn, regle, base=2000.0)
+        resultat = calculator.calculer_montant(self.conn, regle, montant=2000.0)
         self.assertAlmostEqual(resultat["montant"], 200.0)
         self.assertAlmostEqual(resultat["base_calcul"], 2000.0)
         self.assertAlmostEqual(resultat["taux_applique"], 0.10)
@@ -213,7 +232,7 @@ class TestCalculator(unittest.TestCase):
     def test_calcul_bareme_progressif(self):
         regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_ir"], "2026-03-01")
         # Base de 15000 : 10000 premiers à 0%, 5000 restants à 11% => 550
-        resultat = calculator.calculer_montant(self.conn, regle, base=15000.0)
+        resultat = calculator.calculer_montant(self.conn, regle, montant=15000.0)
         self.assertAlmostEqual(resultat["montant"], 550.0)
 
     def test_bareme_sans_tranches_leve_exception(self):
@@ -234,7 +253,7 @@ class TestCalculator(unittest.TestCase):
         self.conn.commit()
         regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_ir"], "2027-06-01")
         with self.assertRaises(DonneesBaremeManquantes):
-            calculator.calculer_montant(self.conn, regle, base=15000.0)
+            calculator.calculer_montant(self.conn, regle, montant=15000.0)
 
 
 class TestFormula(unittest.TestCase):
@@ -257,6 +276,94 @@ class TestFormula(unittest.TestCase):
     def test_formule_refuse_variable_inconnue(self):
         with self.assertRaises(FormuleInvalide):
             formula.evaluer_formule("base * taux_secret", {"base": 1.0})
+
+
+class TestMontantParUnite(unittest.TestCase):
+    def setUp(self):
+        self.conn = _creer_bdd_test()
+        self.ids = _inserer_donnees_de_base(self.conn)
+
+    def test_calcul_montant_par_unite_meme_unite(self):
+        # 40 litres à 0.6829 EUR/L => 27.316 EUR
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_ticpe"], "2026-01-01")
+        resultat = calculator.calculer_montant(self.conn, regle, montant=60.0, quantite=40.0, unite_quantite="L")
+        self.assertAlmostEqual(resultat["montant"], 27.316, places=3)
+        self.assertAlmostEqual(resultat["base_calcul"], 40.0)
+        self.assertAlmostEqual(resultat["taux_applique"], 0.6829)
+
+    def test_calcul_montant_par_unite_avec_conversion(self):
+        # La ligne est saisie en centilitres (4000 cl = 40 L) : le moteur doit convertir.
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_ticpe"], "2026-01-01")
+        resultat = calculator.calculer_montant(self.conn, regle, montant=60.0, quantite=4000.0, unite_quantite="cl")
+        self.assertAlmostEqual(resultat["montant"], 27.316, places=3)
+        self.assertAlmostEqual(resultat["base_calcul"], 40.0)  # converti en litres
+
+    def test_calcul_montant_par_unite_dimension_incompatible(self):
+        # La règle attend des litres (volume), la ligne fournit des kg (masse) : incompatible.
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_ticpe"], "2026-01-01")
+        with self.assertRaises(UniteIncompatible):
+            calculator.calculer_montant(self.conn, regle, montant=60.0, quantite=40.0, unite_quantite="kg")
+
+    def test_conversion_unite_inconnue(self):
+        with self.assertRaises(UniteIncompatible):
+            units.convertir_quantite(10.0, "gallon", "L")
+
+    def test_conversion_meme_dimension(self):
+        self.assertAlmostEqual(units.convertir_quantite(1.5, "kg", "g"), 1500.0)
+        self.assertAlmostEqual(units.convertir_quantite(250, "ml", "L"), 0.25)
+
+
+class TestOrchestrateurAvecQuantite(unittest.TestCase):
+    """Vérifie que l'orchestrateur transmet bien quantite/unite_quantite au
+    calculateur pour une ligne d'achat de type 'montant_par_unite' (ex : un
+    plein de carburant sur un ticket).
+    """
+
+    def setUp(self):
+        self.conn = _creer_bdd_test()
+        self.ids = _inserer_donnees_de_base(self.conn)
+
+        conn = self.conn
+        conn.execute(
+            "INSERT INTO type_depense (code, libelle_fr) VALUES ('CARBURANT', 'Carburant')"
+        )
+        id_type_dep_carburant = conn.execute(
+            "SELECT id FROM type_depense WHERE code = 'CARBURANT'"
+        ).fetchone()["id"]
+        conn.execute(
+            """INSERT INTO categorie_produit (code, libelle_fr, type_depense_id)
+               VALUES ('ESSENCE_TEST', 'Essence (test)', ?)""",
+            (id_type_dep_carburant,),
+        )
+        id_categorie_essence = conn.execute(
+            "SELECT id FROM categorie_produit WHERE code = 'ESSENCE_TEST'"
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id) VALUES (?, ?)",
+            (id_categorie_essence, self.ids["id_prelevement_ticpe"]),
+        )
+
+        curseur = conn.execute(
+            "INSERT INTO document (type_document, date_document) VALUES ('ticket_caisse', '2026-03-01')"
+        )
+        id_document = curseur.lastrowid
+        curseur = conn.execute(
+            """INSERT INTO ligne_document
+               (document_id, libelle_brut, montant, quantite, unite_quantite, categorie_produit_id)
+               VALUES (?, 'Plein essence SP95', 60.0, 40.0, 'L', ?)""",
+            (id_document, id_categorie_essence),
+        )
+        self.id_ligne = curseur.lastrowid
+        conn.commit()
+
+    def test_traitement_ligne_avec_quantite(self):
+        ids_inseres = orchestrator.traiter_ligne_document(self.conn, self.id_ligne, "2026-03-01")
+        self.assertEqual(len(ids_inseres), 1)
+        resultat = self.conn.execute(
+            "SELECT montant_calcule, base_calcul FROM prelevement_calcule WHERE id = ?", (ids_inseres[0],)
+        ).fetchone()
+        self.assertAlmostEqual(resultat["montant_calcule"], 27.316, places=3)
+        self.assertAlmostEqual(resultat["base_calcul"], 40.0)
 
 
 class TestOrchestratorEtAggregator(unittest.TestCase):
