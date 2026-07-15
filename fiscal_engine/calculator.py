@@ -5,7 +5,7 @@ contente d'appliquer une règle déjà déterminée aux données d'une ligne de
 document. Séparer les deux responsabilités permet de tester le calcul
 indépendamment de la logique de résolution temporelle.
 
-Cinq types de règles sont gérés, chacun utilisant une donnée différente de
+Six types de règles sont gérés, chacun utilisant une donnée différente de
 la ligne comme assiette :
   - 'taux_fixe' (assiette 'base_directe' ou 'ttc_inclus') : utilise `montant`.
   - 'montant_fixe' : ignore `montant`/`quantite`, renvoie un montant constant.
@@ -20,6 +20,12 @@ la ligne comme assiette :
     compatible avec l'unité de la règle (`unite`) — voir units.py.
   - 'bareme_progressif' : utilise `montant`, découpé en tranches (voir
     tranche_bareme).
+  - 'montant_declare' : PAS calculable par ce module — le montant est déjà
+    connu, lu directement sur le document source (ex : taxe foncière sur un
+    avis d'imposition, dont le taux est voté par chaque commune, donc non
+    modélisable nationalement). Appeler calculer_montant() sur une règle de
+    ce type lève une ValueError explicite ; le flux normal passe par
+    orchestrator.py qui court-circuite le calcul pour ce cas.
 
 Point d'attention (corrigé suite à revue) : pour les règles de type
 'taux_fixe', deux cas de figure existent et sont distingués via la colonne
@@ -122,6 +128,20 @@ def calculer_montant(
     if type_regle == "bareme_progressif":
         montant_calcule, taux_marginal = _calculer_bareme_progressif(conn, regle["id"], montant)
         return {"montant": montant_calcule, "base_calcul": montant, "taux_applique": taux_marginal}
+
+    if type_regle == "montant_declare":
+        # Ce type marque un prélèvement dont le montant n'est pas calculable
+        # (pas de taux national) et doit être lu directement sur le document
+        # source par l'utilisateur (cf. orchestrator.py, branche
+        # ligne_document.prelevement_id renseigné). Appeler calculer_montant
+        # dessus est une erreur de programmation, pas un cas normal : on le
+        # signale explicitement plutôt que de renvoyer un montant à 0 ou
+        # incorrect silencieusement.
+        raise ValueError(
+            f"La règle id={regle['id']} est de type 'montant_declare' : son montant doit être "
+            f"lu directement sur le document source (ligne_document.montant), pas calculé. "
+            f"calculer_montant() ne doit pas être appelé pour ce type de règle."
+        )
 
     raise ValueError(f"type_regle inconnu : {type_regle!r}")  # ne devrait jamais arriver (contrainte CHECK en base)
 
