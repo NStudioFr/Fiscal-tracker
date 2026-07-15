@@ -182,6 +182,23 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
         (id_prelevement_plafonnee,),
     )
 
+    # Prélèvement de test en mode 'montant_declare' (type taxe foncière :
+    # montant lu directement sur le document, pas de taux calculable).
+    conn.execute(
+        """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
+           VALUES ('FR', ?, 'TAXE_TEST_DECLAREE', 'Taxe de test declaree', 'Test - montant declare')""",
+        (id_typo_ir,),
+    )
+    id_prelevement_declaree = conn.execute(
+        "SELECT id FROM prelevement WHERE code = 'TAXE_TEST_DECLAREE'"
+    ).fetchone()["id"]
+    conn.execute(
+        """INSERT INTO regle_prelevement
+           (prelevement_id, date_debut, date_fin, type_regle, source_reference)
+           VALUES (?, '2026-01-01', NULL, 'montant_declare', 'Test - montant declare')""",
+        (id_prelevement_declaree,),
+    )
+
     conn.execute(
         """INSERT INTO categorie_produit (code, libelle_fr, type_depense_id)
            VALUES ('EPICERIE_SALEE', 'Épicerie salée', ?)""",
@@ -202,6 +219,7 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
         "id_prelevement_cotis": id_prelevement_cotis,
         "id_prelevement_ticpe": id_prelevement_ticpe,
         "id_prelevement_plafonnee": id_prelevement_plafonnee,
+        "id_prelevement_declaree": id_prelevement_declaree,
         "id_categorie": id_categorie,
     }
 
@@ -439,6 +457,42 @@ class TestOrchestrateurAvecQuantite(unittest.TestCase):
         ).fetchone()
         self.assertAlmostEqual(resultat["montant_calcule"], 27.316, places=3)
         self.assertAlmostEqual(resultat["base_calcul"], 40.0)
+
+
+class TestMontantDeclare(unittest.TestCase):
+    def setUp(self):
+        self.conn = _creer_bdd_test()
+        self.ids = _inserer_donnees_de_base(self.conn)
+
+    def test_calculer_montant_refuse_montant_declare(self):
+        # calculer_montant() ne doit JAMAIS être appelé pour ce type : il
+        # doit le refuser explicitement plutôt que renvoyer un résultat faux.
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_declaree"], "2026-06-01")
+        with self.assertRaises(ValueError):
+            calculator.calculer_montant(self.conn, regle, montant=1200.0)
+
+    def test_orchestrateur_enregistre_montant_declare_sans_calcul(self):
+        # Sur une ligne de type "avis d'imposition", le prélèvement est
+        # explicitement nommé et son montant déjà connu : l'orchestrateur ne
+        # doit PAS appeler calculer_montant, juste enregistrer tel quel.
+        curseur = self.conn.execute(
+            "INSERT INTO document (type_document, date_document) VALUES ('avis_imposition', '2026-09-01')"
+        )
+        id_document = curseur.lastrowid
+        curseur = self.conn.execute(
+            """INSERT INTO ligne_document (document_id, libelle_brut, montant, prelevement_id)
+               VALUES (?, 'Taxe fonciere test', 1250.0, ?)""",
+            (id_document, self.ids["id_prelevement_declaree"]),
+        )
+        id_ligne = curseur.lastrowid
+        self.conn.commit()
+
+        ids_inseres = orchestrator.traiter_ligne_document(self.conn, id_ligne, "2026-09-01")
+        self.assertEqual(len(ids_inseres), 1)
+        resultat = self.conn.execute(
+            "SELECT montant_calcule FROM prelevement_calcule WHERE id = ?", (ids_inseres[0],)
+        ).fetchone()
+        self.assertAlmostEqual(resultat["montant_calcule"], 1250.0)
 
 
 class TestOrchestratorEtAggregator(unittest.TestCase):
