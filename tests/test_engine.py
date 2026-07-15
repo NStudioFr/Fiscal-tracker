@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fiscal_engine import db, resolver, calculator, orchestrator, aggregator, formula, units, parameters
+from fiscal_engine import db, resolver, calculator, orchestrator, aggregator, formula, units, parameters, foyer
 from fiscal_engine.exceptions import (
     AucuneRegleApplicable,
     ReglesChevauchantes,
@@ -457,6 +457,100 @@ class TestOrchestrateurAvecQuantite(unittest.TestCase):
         ).fetchone()
         self.assertAlmostEqual(resultat["montant_calcule"], 27.316, places=3)
         self.assertAlmostEqual(resultat["base_calcul"], 40.0)
+
+
+class TestFoyerFiscal(unittest.TestCase):
+    def setUp(self):
+        self.conn = _creer_bdd_test()
+        self.ids = _inserer_donnees_de_base(self.conn)
+
+        # Paramètres de test pour le quotient familial et la décote (valeurs
+        # volontairement rondes et basses pour des calculs à la main simples,
+        # PAS les vrais montants légaux — voir seed_data/fr_seed_lot3.sql
+        # pour les vraies valeurs 2026 sourcées).
+        parametres_test = {
+            "PLAFOND_QF_DEMI_PART": 300.0,
+            "PLAFOND_QF_PARENT_ISOLE_1ER_ENFANT": 3000.0,
+            "DECOTE_SEUIL_CELIBATAIRE": 500.0,
+            "DECOTE_SEUIL_COUPLE": 800.0,
+            "DECOTE_FORFAIT_CELIBATAIRE": 300.0,
+            "DECOTE_FORFAIT_COUPLE": 500.0,
+            "DECOTE_TAUX": 0.5,
+        }
+        for code, valeur in parametres_test.items():
+            self.conn.execute(
+                "INSERT INTO parametre_reference (pays_code, code, libelle_fr) VALUES ('FR', ?, ?)",
+                (code, code),
+            )
+            id_param = self.conn.execute(
+                "SELECT id FROM parametre_reference WHERE code = ?", (code,)
+            ).fetchone()["id"]
+            self.conn.execute(
+                """INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+                   VALUES (?, '2026-01-01', NULL, ?, 'Test')""",
+                (id_param, valeur),
+            )
+        self.conn.commit()
+
+    # --- Nombre de parts ---
+
+    def test_parts_celibataire_sans_enfant(self):
+        s = foyer.SituationFoyer(situation_familiale="celibataire")
+        self.assertAlmostEqual(foyer.calculer_nombre_parts(s), 1.0)
+
+    def test_parts_marie_sans_enfant(self):
+        s = foyer.SituationFoyer(situation_familiale="marie")
+        self.assertAlmostEqual(foyer.calculer_nombre_parts(s), 2.0)
+
+    def test_parts_celibataire_deux_enfants(self):
+        s = foyer.SituationFoyer(situation_familiale="celibataire", nombre_enfants_a_charge=2)
+        self.assertAlmostEqual(foyer.calculer_nombre_parts(s), 2.0)  # 1 + 0.5 + 0.5
+
+    def test_parts_celibataire_trois_enfants(self):
+        s = foyer.SituationFoyer(situation_familiale="celibataire", nombre_enfants_a_charge=3)
+        self.assertAlmostEqual(foyer.calculer_nombre_parts(s), 3.0)  # 1 + 0.5 + 0.5 + 1.0
+
+    def test_parts_veuf_sans_enfant(self):
+        s = foyer.SituationFoyer(situation_familiale="veuf")
+        self.assertAlmostEqual(foyer.calculer_nombre_parts(s), 1.0)
+
+    def test_parts_veuf_avec_enfant_maintien_quotient_conjugal(self):
+        s = foyer.SituationFoyer(situation_familiale="veuf", nombre_enfants_a_charge=1)
+        self.assertAlmostEqual(foyer.calculer_nombre_parts(s), 2.5)  # 2 (maintien) + 0.5
+
+    def test_parts_parent_isole(self):
+        s = foyer.SituationFoyer(situation_familiale="celibataire", nombre_enfants_a_charge=1, parent_isole=True)
+        self.assertAlmostEqual(foyer.calculer_nombre_parts(s), 2.0)  # 1 + 0.5 + 0.5
+
+    # --- Calcul complet (barème de test : 0% jusqu'à 10000, 11% au-delà) ---
+
+    def test_impot_sans_avantage_qf_ni_decote(self):
+        s = foyer.SituationFoyer(situation_familiale="celibataire")
+        resultat = foyer.calculer_impot_foyer(self.conn, s, revenu_net_imposable=20000.0, date_reference="2026-06-01")
+        self.assertAlmostEqual(resultat["nombre_parts"], 1.0)
+        self.assertAlmostEqual(resultat["impot_final"], 1100.0)  # (20000-10000)*0.11, pas de decote (1100>500)
+        self.assertAlmostEqual(resultat["decote"], 0.0)
+
+    def test_impot_avec_avantage_qf_plafonne(self):
+        # Celibataire + 2 enfants, 40000E : avantage QF brut = 1100 (constant
+        # avec ce bareme a 2 tranches), mais plafond de test = 300/demi-part x
+        # 2 demi-parts = 600 -> l'avantage est ECRETE a 600, pas 1100.
+        s = foyer.SituationFoyer(situation_familiale="celibataire", nombre_enfants_a_charge=2)
+        resultat = foyer.calculer_impot_foyer(self.conn, s, revenu_net_imposable=40000.0, date_reference="2026-06-01")
+        self.assertAlmostEqual(resultat["avantage_quotient_familial"], 1100.0)
+        self.assertAlmostEqual(resultat["avantage_quotient_familial_plafonne"], 600.0)
+        self.assertAlmostEqual(resultat["impot_apres_plafonnement"], 3300.0 - 600.0)  # 2700
+
+    def test_impot_avec_decote_ramene_a_zero(self):
+        # Revenu juste au-dessus du seuil d'imposition : impot brut faible,
+        # la decote de test doit le ramener a 0.
+        s = foyer.SituationFoyer(situation_familiale="celibataire")
+        resultat = foyer.calculer_impot_foyer(self.conn, s, revenu_net_imposable=10500.0, date_reference="2026-06-01")
+        impot_avant_decote = 500.0 * 0.11  # 55.0
+        self.assertAlmostEqual(resultat["impot_apres_plafonnement"], impot_avant_decote)
+        decote_attendue = max(300.0 - 0.5 * impot_avant_decote, 0.0)
+        self.assertAlmostEqual(resultat["decote"], decote_attendue)
+        self.assertAlmostEqual(resultat["impot_final"], 0.0)  # decote (272.5) > impot brut (55) -> plafonne a 0
 
 
 class TestMontantDeclare(unittest.TestCase):
