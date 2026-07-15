@@ -9,6 +9,11 @@
 --     plafonnement réel de la part plafonnée au PMSS
 --   - Barème de l'impôt sur le revenu 2026 (revenus 2025)
 --   - TICPE essence SP95-E5 et gazole (taux national, hors majoration régionale)
+--   - TICGN (accise gaz naturel), taxe foncière et THRS (voir plus bas)
+--   - Quotient familial + son plafonnement + décote (paramètres ci-dessous,
+--     calcul orchestré par fiscal_engine/foyer.py — voir limites détaillées
+--     dans ce module : garde alternée, handicap, plafonds spécifiques
+--     veuf/invalide non gérés)
 --   - Quelques catégories produit d'exemple (mapping non exhaustif à ce stade)
 --
 -- Le plafonnement s'appuie sur de nouveaux paramètres de référence versionnés
@@ -21,8 +26,7 @@
 --     limite encadrée) : seul le taux national est modélisé ici.
 --   - Cotisations patronales (hors périmètre : ce logiciel comptabilise les
 --     prélèvements payés PAR la personne, pas le coût total employeur).
---   - Régime des indépendants, quotient familial, décote IR : à ajouter
---     dans un lot ultérieur dédié.
+--   - Régime des indépendants : à ajouter dans un lot ultérieur dédié.
 -- =========================================================================
 
 -- -------------------------------------------------------------------------
@@ -110,6 +114,58 @@ INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, vale
 SELECT id, '2026-01-01', NULL, 16020.0, 'Égal à 4 PMSS 2026 (4 x 4005 €) — Art. L136-8 CSS pour le principe du plafonnement de l''abattement'
 FROM parametre_reference WHERE code = 'PLAFOND_ABATTEMENT_CSG_CRDS_MENSUEL';
 
+-- Paramètres du quotient familial et de la décote (revenus 2025, imposition
+-- 2026). Sources concordantes (LégiFiscal citant actualité BOFiP du
+-- 07/04/2026 - BOI-IR-LIQ-20-10 §40 ; Meilleurtaux Placement).
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PLAFOND_QF_DEMI_PART', 'Plafond de l''avantage du quotient familial par demi-part supplémentaire', 'Family quotient benefit cap per additional half-share', 'Techo de la ventaja del cociente familiar por media parte adicional');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PLAFOND_QF_PARENT_ISOLE_1ER_ENFANT', 'Plafond de l''avantage du quotient familial pour la part de parent isolé (1er enfant)', 'Family quotient benefit cap for single-parent share (first child)', 'Techo de la ventaja del cociente familiar para el padre/madre soltero/a (primer hijo)');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'DECOTE_SEUIL_CELIBATAIRE', 'Seuil d''impôt brut en-deçà duquel la décote s''applique (personne seule)', 'Gross tax threshold below which the tax rebate applies (single)', 'Umbral de impuesto bruto por debajo del cual se aplica la reducción (soltero)');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'DECOTE_SEUIL_COUPLE', 'Seuil d''impôt brut en-deçà duquel la décote s''applique (couple)', 'Gross tax threshold below which the tax rebate applies (couple)', 'Umbral de impuesto bruto por debajo del cual se aplica la reducción (pareja)');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'DECOTE_FORFAIT_CELIBATAIRE', 'Montant forfaitaire de la formule de décote (personne seule)', 'Flat amount in the tax rebate formula (single)', 'Importe fijo de la fórmula de reducción (soltero)');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'DECOTE_FORFAIT_COUPLE', 'Montant forfaitaire de la formule de décote (couple)', 'Flat amount in the tax rebate formula (couple)', 'Importe fijo de la fórmula de reducción (pareja)');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'DECOTE_TAUX', 'Taux appliqué à l''impôt brut dans la formule de décote', 'Rate applied to gross tax in the tax rebate formula', 'Tasa aplicada al impuesto bruto en la fórmula de reducción');
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 1807.0, 'Art. 197 CGI — LégiFiscal citant actualité BOFiP du 07/04/2026 (BOI-IR-LIQ-20-10 §40), revenus 2025'
+FROM parametre_reference WHERE code = 'PLAFOND_QF_DEMI_PART';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 4262.0, 'Art. 197 CGI — LégiFiscal citant actualité BOFiP du 07/04/2026 (BOI-IR-LIQ-20-10 §40), revenus 2025'
+FROM parametre_reference WHERE code = 'PLAFOND_QF_PARENT_ISOLE_1ER_ENFANT';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 1982.0, 'Art. 197 CGI — LégiFiscal (BOFiP 07/04/2026) et Meilleurtaux Placement, revenus 2025'
+FROM parametre_reference WHERE code = 'DECOTE_SEUIL_CELIBATAIRE';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 3277.0, 'Art. 197 CGI — Meilleurtaux Placement, cohérent avec le seuil célibataire (1982) et le forfait couple (1483) via taux 45,25%, revenus 2025'
+FROM parametre_reference WHERE code = 'DECOTE_SEUIL_COUPLE';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 897.0, 'Art. 197 CGI — LégiFiscal (BOFiP 07/04/2026) et Meilleurtaux Placement, revenus 2025'
+FROM parametre_reference WHERE code = 'DECOTE_FORFAIT_CELIBATAIRE';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 1483.0, 'Art. 197 CGI — Meilleurtaux Placement, revenus 2025'
+FROM parametre_reference WHERE code = 'DECOTE_FORFAIT_COUPLE';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 0.4525, 'Art. 197 CGI — LégiFiscal (BOFiP 07/04/2026) et Meilleurtaux Placement, revenus 2025'
+FROM parametre_reference WHERE code = 'DECOTE_TAUX';
+
 -- =========================================================================
 -- CSG / CRDS sur salaire
 -- =========================================================================
@@ -196,7 +252,7 @@ FROM typologie_prelevement WHERE code = 'IMPOT_REVENU';
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, source_reference, commentaire)
 SELECT id, '2026-01-01', NULL, 'bareme_progressif',
        'Art. 4 de la loi n°2026-103 du 19/02/2026 de finances pour 2026 (barème applicable aux revenus 2025)',
-       'Résultat exprimé PAR PART. Le quotient familial (division/multiplication par le nombre de parts), le plafonnement du QF et la décote ne sont PAS gérés dans ce lot.'
+       'Résultat exprimé PAR PART. Le quotient familial, son plafonnement, et la décote sont calculés séparément par fiscal_engine/foyer.py (calculer_impot_foyer), qui appelle ce barème par-part comme brique de base.'
 FROM prelevement WHERE code = 'IR_BAREME';
 
 INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
