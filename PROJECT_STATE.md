@@ -11,17 +11,16 @@
   si dimensions incompatibles, ex : L vs kg)
 
 ## Modules terminés
-- [x] Lot 1 : schéma BDD + doc architecture
-- [x] Lot 2 : moteur de règles applicatif — 27/27 tests unitaires passent
-- [x] Correctif TVA-sur-TTC
-- [x] Extension quantité/unité (montant_par_unite + units.py)
-- [x] Lot 3 : contenu fiscal France (TVA, CSG/CRDS, cotisation vieillesse, IR, TICPE)
-- [x] Plafonnement générique (Point 1 de l'ordre de traitement) : nouvelles tables
-  parametre_reference / valeur_parametre_reference + module fiscal_engine/parameters.py.
-  Réutilise le moteur de formules existant (pas de colonne "plafond" dédiée).
-  CSG/CRDS et cotisation vieillesse plafonnée recalculées avec seuils réels (PMSS,
-  4×PMSS) — validé sur un cas de haut salaire (20000€/mois) où le plafonnement change
-  effectivement le résultat par rapport à un calcul non plafonné.
+- [x] Lot 1, Lot 2, correctifs TVA/quantité, Lot 3 (voir historique précédent)
+- [x] Point 1 : plafonnement générique (PMSS) via parametre_reference
+- [x] Point 2 : taxes écologiques par quantité + impôts locaux — 29/29 tests passent
+  - Nouveau type_regle 'montant_declare' (montant lu directement sur le document,
+    pour les prélèvements sans taux national : taxe foncière, THRS)
+  - TICGN ajoutée (accise gaz naturel, 16,39 €/MWh) — validée contre exemple officiel
+    (180,29€ pour 11000 kWh/an)
+  - Taxe foncière + taxe d'habitation résidence secondaire (THRS) ajoutées
+  - Point de vigilance vérifié : la taxe d'habitation sur la RÉSIDENCE PRINCIPALE
+    est supprimée depuis 2023, seule la THRS (résidences secondaires) subsiste
 
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
@@ -31,5 +30,5 @@
 - Mapping catégorie produit → prélèvement encore très partiel (5 catégories d'exemple)
 
 ## Prochaine étape (ordre convenu)
-Point 2 : taxes écologiques par quantité (déjà en grande partie fait via TICPE) +
-taxe foncière/habitation (lignes à prélèvement explicite, type fiche de paie)
+Point 3 : foyer fiscal → quotient familial → décote (bloc séquentiel, nécessite
+un nouveau concept structurel de "foyer" absent du schéma actuel)
