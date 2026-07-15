@@ -5,16 +5,21 @@ contente d'appliquer une règle déjà déterminée aux données d'une ligne de
 document. Séparer les deux responsabilités permet de tester le calcul
 indépendamment de la logique de résolution temporelle.
 
-Quatre types de règles sont gérés, chacun utilisant une donnée différente de
+Cinq types de règles sont gérés, chacun utilisant une donnée différente de
 la ligne comme assiette :
   - 'taux_fixe' (assiette 'base_directe' ou 'ttc_inclus') : utilise `montant`.
   - 'montant_fixe' : ignore `montant`/`quantite`, renvoie un montant constant.
-  - 'formule' : utilise `montant` ET `quantite`, disponibles comme variables
-    'base' et 'quantite' dans la formule (ex : une taxe combinant un montant
-    et un volume).
+  - 'formule' : utilise `montant` et `quantite`, disponibles comme variables
+    'base' et 'quantite' dans la formule, ENRICHIES de tous les paramètres
+    de référence versionnés en vigueur à `date_reference` (ex : 'PMSS_MENSUEL').
+    C'est ce mécanisme qui permet d'exprimer un plafonnement ou un seuil
+    (ex : "min(base, PMSS_MENSUEL) * 0.069") sans ajouter de colonne dédiée
+    à regle_prelevement à chaque nouveau cas de plafond rencontré.
   - 'montant_par_unite' : utilise `quantite` (ex : nombre de litres), PAS
     `montant`. Nécessite que l'unité de la ligne (`unite_quantite`) soit
     compatible avec l'unité de la règle (`unite`) — voir units.py.
+  - 'bareme_progressif' : utilise `montant`, découpé en tranches (voir
+    tranche_bareme).
 
 Point d'attention (corrigé suite à revue) : pour les règles de type
 'taux_fixe', deux cas de figure existent et sont distingués via la colonne
@@ -32,6 +37,7 @@ import sqlite3
 
 from .exceptions import DonneesBaremeManquantes
 from .formula import evaluer_formule
+from .parameters import charger_parametres_disponibles
 from .units import convertir_quantite
 
 
@@ -41,12 +47,15 @@ def calculer_montant(
     montant: float,
     quantite: float = 1.0,
     unite_quantite: str = "unite",
+    date_reference: str | None = None,
+    pays_code: str = "FR",
 ) -> dict:
     """Calcule le montant d'un prélèvement pour une règle et une ligne données.
 
     Args:
         conn: connexion SQLite (nécessaire pour aller chercher les tranches
-            en cas de barème progressif).
+            en cas de barème progressif, ou les paramètres de référence en
+            cas de formule).
         regle: ligne de `regle_prelevement` (issue de resolver.resoudre_regle).
         montant: montant en euros de la ligne (ex : montant TTC d'une ligne
             de ticket, salaire brut mensuel...). Utilisé par 'taux_fixe' et
@@ -59,6 +68,14 @@ def calculer_montant(
         unite_quantite: unité dans laquelle `quantite` est exprimée (ex :
             'L', 'kg', 'unite'). Voir fiscal_engine.units pour les unités
             reconnues.
+        date_reference: date à utiliser pour résoudre les paramètres de
+            référence (PMSS, etc.) disponibles dans une formule. Uniquement
+            nécessaire pour type_regle = 'formule' ; si omis, la formule
+            n'aura accès qu'à 'base' et 'quantite' (pas aux paramètres de
+            référence — une formule qui en a besoin lèvera alors
+            FormuleInvalide pour variable inconnue).
+        pays_code: pays dont les paramètres de référence doivent être
+            chargés (défaut 'FR' — ce projet est mono-pays à ce stade).
 
     Returns:
         Un dict {"montant": float, "base_calcul": float, "taux_applique": float | None}
@@ -91,7 +108,10 @@ def calculer_montant(
         return {"montant": regle["montant_fixe"], "base_calcul": montant, "taux_applique": None}
 
     if type_regle == "formule":
-        montant_calcule = evaluer_formule(regle["formule"], {"base": montant, "quantite": quantite})
+        variables = {"base": montant, "quantite": quantite}
+        if date_reference is not None:
+            variables.update(charger_parametres_disponibles(conn, pays_code, date_reference))
+        montant_calcule = evaluer_formule(regle["formule"], variables)
         return {"montant": montant_calcule, "base_calcul": montant, "taux_applique": None}
 
     if type_regle == "montant_par_unite":
