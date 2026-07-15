@@ -75,10 +75,12 @@ CREATE TABLE regle_prelevement (
     date_debut          TEXT NOT NULL,          -- date d'entrée en vigueur (incluse)
     date_fin            TEXT,                   -- date de fin (incluse) ; NULL = toujours en vigueur
     type_regle          TEXT NOT NULL CHECK (type_regle IN
-                            ('taux_fixe', 'montant_fixe', 'bareme_progressif', 'formule')),
+                            ('taux_fixe', 'montant_fixe', 'bareme_progressif', 'formule', 'montant_par_unite')),
     taux                REAL,                   -- pour type_regle = 'taux_fixe' (ex : 0.20 pour 20%)
     montant_fixe        REAL,                   -- pour type_regle = 'montant_fixe'
     formule             TEXT,                   -- pour type_regle = 'formule' (interprétée par le moteur applicatif)
+    montant_unitaire    REAL,                   -- pour type_regle = 'montant_par_unite' (ex : 0.6829 pour la TICPE essence en €/L)
+    unite               TEXT,                   -- unité de référence de la règle (ex : 'L', 'kg', 'kWh') — pour type_regle = 'montant_par_unite'
     -- assiette : uniquement significatif pour type_regle = 'taux_fixe'.
     --   'base_directe' : le taux s'applique tel quel sur la base fournie
     --                    (ex : cotisation calculée sur un salaire brut).
@@ -186,6 +188,7 @@ CREATE TABLE ligne_document (
     libelle_brut             TEXT NOT NULL,      -- texte OCR brut de la ligne, non modifié
     montant                 REAL NOT NULL,       -- montant de la ligne (TTC pour achat, montant pour cotisation)
     quantite                REAL NOT NULL DEFAULT 1,
+    unite_quantite           TEXT NOT NULL DEFAULT 'unite',  -- ce que représente `quantite` : 'unite' (défaut, nombre d'articles), 'L', 'cl', 'ml', 'kg', 'g', 'kWh'...
     categorie_produit_id     INTEGER REFERENCES categorie_produit(id),   -- pour les achats
     prelevement_id           INTEGER REFERENCES prelevement(id),         -- si déjà nommé explicitement (ex : fiche de paie)
     produit_reference_id     INTEGER REFERENCES produit_reference(id)    -- si identifié via code-barres / OFF
