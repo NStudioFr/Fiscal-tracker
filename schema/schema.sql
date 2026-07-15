@@ -75,12 +75,19 @@ CREATE TABLE regle_prelevement (
     date_debut          TEXT NOT NULL,          -- date d'entrée en vigueur (incluse)
     date_fin            TEXT,                   -- date de fin (incluse) ; NULL = toujours en vigueur
     type_regle          TEXT NOT NULL CHECK (type_regle IN
-                            ('taux_fixe', 'montant_fixe', 'bareme_progressif', 'formule', 'montant_par_unite')),
+                            ('taux_fixe', 'montant_fixe', 'bareme_progressif', 'formule', 'montant_par_unite', 'montant_declare')),
     taux                REAL,                   -- pour type_regle = 'taux_fixe' (ex : 0.20 pour 20%)
     montant_fixe        REAL,                   -- pour type_regle = 'montant_fixe'
     formule             TEXT,                   -- pour type_regle = 'formule' (interprétée par le moteur applicatif)
     montant_unitaire    REAL,                   -- pour type_regle = 'montant_par_unite' (ex : 0.6829 pour la TICPE essence en €/L)
     unite               TEXT,                   -- unité de référence de la règle (ex : 'L', 'kg', 'kWh') — pour type_regle = 'montant_par_unite'
+    -- type_regle = 'montant_declare' : aucune colonne numérique n'est renseignée
+    -- (taux/montant_fixe/formule/montant_unitaire tous NULL). Ce type marque un
+    -- prélèvement dont le montant n'est PAS calculable par le moteur (pas de taux
+    -- national : chaque commune vote le sien), mais qui est directement lu sur le
+    -- document source par l'utilisateur (ex : taxe foncière, taxe d'habitation sur
+    -- une résidence secondaire, sur un avis d'imposition). Le calculateur refuse
+    -- explicitement de "calculer" ce type — voir fiscal_engine/calculator.py.
     -- assiette : uniquement significatif pour type_regle = 'taux_fixe'.
     --   'base_directe' : le taux s'applique tel quel sur la base fournie
     --                    (ex : cotisation calculée sur un salaire brut).
