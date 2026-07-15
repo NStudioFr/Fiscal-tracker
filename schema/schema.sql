@@ -103,6 +103,36 @@ CREATE INDEX idx_regle_prelevement_prelevement ON regle_prelevement(prelevement_
 CREATE INDEX idx_regle_prelevement_dates ON regle_prelevement(date_debut, date_fin);
 
 -- -------------------------------------------------------------------------
+-- 5bis. Paramètres de référence versionnés (PMSS, SMIC, et autres valeurs
+--       utilisées comme seuils/plafonds dans les formules de calcul).
+--       Même logique de versioning temporel que regle_prelevement, mais pour
+--       de simples constantes numériques réutilisables par plusieurs règles.
+-- -------------------------------------------------------------------------
+CREATE TABLE parametre_reference (
+    id              INTEGER PRIMARY KEY,
+    pays_code       TEXT NOT NULL REFERENCES pays(code),
+    code            TEXT NOT NULL,          -- ex : 'PMSS_MENSUEL' — utilisé comme nom de variable dans les formules
+    libelle_fr      TEXT NOT NULL,
+    libelle_en      TEXT,
+    libelle_es      TEXT,
+    UNIQUE (pays_code, code)
+);
+
+CREATE TABLE valeur_parametre_reference (
+    id                  INTEGER PRIMARY KEY,
+    parametre_id        INTEGER NOT NULL REFERENCES parametre_reference(id),
+    date_debut          TEXT NOT NULL,
+    date_fin            TEXT,               -- NULL = toujours en vigueur
+    valeur              REAL NOT NULL,
+    source_reference    TEXT NOT NULL,
+
+    CHECK (date_fin IS NULL OR date_fin >= date_debut)
+);
+
+CREATE INDEX idx_valeur_parametre_parametre ON valeur_parametre_reference(parametre_id);
+CREATE INDEX idx_valeur_parametre_dates ON valeur_parametre_reference(date_debut, date_fin);
+
+-- -------------------------------------------------------------------------
 -- 6. Tranches de barème progressif (ex : barème IR)
 -- -------------------------------------------------------------------------
 CREATE TABLE tranche_bareme (
