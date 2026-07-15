@@ -68,6 +68,9 @@ def traiter_ligne_document(conn: sqlite3.Connection, ligne_document_id: int, dat
 
         for row in prelevements:
             prelevement_id = row["prelevement_id"]
+            pays_code = conn.execute(
+                "SELECT pays_code FROM prelevement WHERE id = ?", (prelevement_id,)
+            ).fetchone()["pays_code"]
             regle = resoudre_regle(conn, prelevement_id, date_reference)
             resultat = calculer_montant(
                 conn,
@@ -75,6 +78,8 @@ def traiter_ligne_document(conn: sqlite3.Connection, ligne_document_id: int, dat
                 montant=ligne["montant"],
                 quantite=ligne["quantite"],
                 unite_quantite=ligne["unite_quantite"],
+                date_reference=date_reference,
+                pays_code=pays_code,
             )
             id_insere = _enregistrer(
                 conn,
