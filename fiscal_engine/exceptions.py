@@ -37,3 +37,12 @@ class DonneesBaremeManquantes(FiscalEngineError):
     """Levée quand une règle de type 'bareme_progressif' n'a aucune tranche
     associée en base — donnée incomplète, ne doit pas être calculée à 0 silencieusement.
     """
+
+
+class UniteIncompatible(FiscalEngineError):
+    """Levée quand une règle de type 'montant_par_unite' ne peut pas être
+    appliquée à une ligne de document : unité inconnue, ou unité de la ligne
+    incompatible avec l'unité de la règle (ex : la règle attend des litres,
+    la ligne fournit des kilos). Le moteur ne doit jamais deviner une
+    conversion arbitraire entre deux dimensions physiques différentes.
+    """
