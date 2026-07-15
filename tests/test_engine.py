@@ -11,13 +11,14 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fiscal_engine import db, resolver, calculator, orchestrator, aggregator, formula, units
+from fiscal_engine import db, resolver, calculator, orchestrator, aggregator, formula, units, parameters
 from fiscal_engine.exceptions import (
     AucuneRegleApplicable,
     ReglesChevauchantes,
     FormuleInvalide,
     DonneesBaremeManquantes,
     UniteIncompatible,
+    AucuneValeurParametreApplicable,
 )
 
 CHEMIN_SCHEMA = Path(__file__).resolve().parent.parent / "schema" / "schema.sql"
@@ -151,6 +152,36 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
         (id_prelevement_ticpe,),
     )
 
+    # Paramètre de référence versionné (type PMSS), utilisé pour tester le
+    # plafonnement via formule.
+    conn.execute(
+        "INSERT INTO parametre_reference (pays_code, code, libelle_fr) VALUES ('FR', 'PMSS_TEST', 'PMSS de test')"
+    )
+    id_parametre_pmss = conn.execute(
+        "SELECT id FROM parametre_reference WHERE code = 'PMSS_TEST'"
+    ).fetchone()["id"]
+    conn.execute(
+        """INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+           VALUES (?, '2026-01-01', NULL, 4000.0, 'Test - PMSS fictif 4000')""",
+        (id_parametre_pmss,),
+    )
+
+    # Prélèvement de test plafonné via formule : min(base, PMSS_TEST) * 0.069
+    conn.execute(
+        """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
+           VALUES ('FR', ?, 'COTIS_PLAFONNEE_TEST', 'Cotisation plafonnee de test', 'Test - plafonnement')""",
+        (id_typo_ir,),
+    )
+    id_prelevement_plafonnee = conn.execute(
+        "SELECT id FROM prelevement WHERE code = 'COTIS_PLAFONNEE_TEST'"
+    ).fetchone()["id"]
+    conn.execute(
+        """INSERT INTO regle_prelevement
+           (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference)
+           VALUES (?, '2026-01-01', NULL, 'formule', 'min(base, PMSS_TEST) * 0.069', 'Test - formule plafonnee')""",
+        (id_prelevement_plafonnee,),
+    )
+
     conn.execute(
         """INSERT INTO categorie_produit (code, libelle_fr, type_depense_id)
            VALUES ('EPICERIE_SALEE', 'Épicerie salée', ?)""",
@@ -170,6 +201,7 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
         "id_prelevement_ir": id_prelevement_ir,
         "id_prelevement_cotis": id_prelevement_cotis,
         "id_prelevement_ticpe": id_prelevement_ticpe,
+        "id_prelevement_plafonnee": id_prelevement_plafonnee,
         "id_categorie": id_categorie,
     }
 
@@ -311,6 +343,49 @@ class TestMontantParUnite(unittest.TestCase):
     def test_conversion_meme_dimension(self):
         self.assertAlmostEqual(units.convertir_quantite(1.5, "kg", "g"), 1500.0)
         self.assertAlmostEqual(units.convertir_quantite(250, "ml", "L"), 0.25)
+
+
+class TestParametresEtPlafonnement(unittest.TestCase):
+    def setUp(self):
+        self.conn = _creer_bdd_test()
+        self.ids = _inserer_donnees_de_base(self.conn)
+
+    def test_resoudre_parametre(self):
+        valeur = parameters.resoudre_parametre(self.conn, "PMSS_TEST", "FR", "2026-06-01")
+        self.assertAlmostEqual(valeur, 4000.0)
+
+    def test_resoudre_parametre_inexistant(self):
+        with self.assertRaises(AucuneValeurParametreApplicable):
+            parameters.resoudre_parametre(self.conn, "PARAMETRE_INCONNU", "FR", "2026-06-01")
+
+    def test_charger_parametres_disponibles(self):
+        parametres = parameters.charger_parametres_disponibles(self.conn, "FR", "2026-06-01")
+        self.assertIn("PMSS_TEST", parametres)
+        self.assertAlmostEqual(parametres["PMSS_TEST"], 4000.0)
+
+    def test_formule_sous_le_plafond(self):
+        # base = 3000, plafond = 4000 -> pas de plafonnement, calcul normal
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_plafonnee"], "2026-06-01")
+        resultat = calculator.calculer_montant(
+            self.conn, regle, montant=3000.0, date_reference="2026-06-01", pays_code="FR"
+        )
+        self.assertAlmostEqual(resultat["montant"], 3000.0 * 0.069)
+
+    def test_formule_au_dessus_du_plafond(self):
+        # base = 5000, plafond = 4000 -> le calcul est plafonné à 4000
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_plafonnee"], "2026-06-01")
+        resultat = calculator.calculer_montant(
+            self.conn, regle, montant=5000.0, date_reference="2026-06-01", pays_code="FR"
+        )
+        self.assertAlmostEqual(resultat["montant"], 4000.0 * 0.069)  # PAS 5000 * 0.069
+
+    def test_formule_sans_date_reference_leve_variable_inconnue(self):
+        # Sans date_reference, le paramètre PMSS_TEST n'est pas chargé : la
+        # formule qui le référence doit échouer explicitement (pas de calcul
+        # silencieusement faux).
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_plafonnee"], "2026-06-01")
+        with self.assertRaises(FormuleInvalide):
+            calculator.calculer_montant(self.conn, regle, montant=5000.0)  # pas de date_reference
 
 
 class TestOrchestrateurAvecQuantite(unittest.TestCase):
