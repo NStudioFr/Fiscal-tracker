@@ -11,16 +11,26 @@
   si dimensions incompatibles, ex : L vs kg)
 
 ## Modules terminés
-- [x] Lot 1, Lot 2, correctifs TVA/quantité, Lot 3 (voir historique précédent)
-- [x] Point 1 : plafonnement générique (PMSS) via parametre_reference
-- [x] Point 2 : taxes écologiques par quantité + impôts locaux — 29/29 tests passent
-  - Nouveau type_regle 'montant_declare' (montant lu directement sur le document,
-    pour les prélèvements sans taux national : taxe foncière, THRS)
-  - TICGN ajoutée (accise gaz naturel, 16,39 €/MWh) — validée contre exemple officiel
-    (180,29€ pour 11000 kWh/an)
-  - Taxe foncière + taxe d'habitation résidence secondaire (THRS) ajoutées
-  - Point de vigilance vérifié : la taxe d'habitation sur la RÉSIDENCE PRINCIPALE
-    est supprimée depuis 2023, seule la THRS (résidences secondaires) subsiste
+- [x] Points 1-2 (voir historique précédent)
+- [x] Point 3 : foyer fiscal → quotient familial → décote — 39/39 tests passent
+  - Nouveau module fiscal_engine/foyer.py (SituationFoyer, calculer_nombre_parts,
+    calculer_impot_foyer) — orchestration haut niveau au-dessus du moteur générique
+  - Nouveaux paramètres versionnés : PLAFOND_QF_DEMI_PART (1807€), 
+    PLAFOND_QF_PARENT_ISOLE_1ER_ENFANT (4262€), DECOTE_SEUIL/FORFAIT_CELIBATAIRE/COUPLE,
+    DECOTE_TAUX (0,4525) — revenus 2025, sourcés LégiFiscal (citant BOFiP 07/04/2026) + 
+    Meilleurtaux Placement (deux sources indépendantes, cohérentes mathématiquement)
+  - Validé : décote à l'euro près (444,50€ pour impôt brut 1000€ célibataire) et
+    plafonnement QF exact (avantage brut 6896€ écrêté à 3614€ = 2×1807€ pour un couple
+    2 enfants à 90000€)
+
+## Limites assumées de foyer.py (documentées dans le module)
+- Garde alternée non gérée (quart de part au lieu de demi-part)
+- Enfants handicapés, anciens combattants, cartes d'invalidité : non gérés
+- Plafonds spécifiques "personne seule ayant élevé un enfant" (1079€) et
+  "veuf avec personne à charge" (5625€) non gérés — seuls plafond standard (1807€)
+  et parent isolé 1er enfant (4262€) sont implémentés
+- Imposition séparée des époux/pacsés non gérée
+- revenu_net_imposable supposé déjà net (abattements/déductions non calculés ici)
 
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
@@ -30,5 +40,5 @@
 - Mapping catégorie produit → prélèvement encore très partiel (5 catégories d'exemple)
 
 ## Prochaine étape (ordre convenu)
-Point 3 : foyer fiscal → quotient familial → décote (bloc séquentiel, nécessite
-un nouveau concept structurel de "foyer" absent du schéma actuel)
+Point 4 : régime des indépendants (micro/réel) — dernier point de l'ordre initial,
+volontairement isolé car autonome
