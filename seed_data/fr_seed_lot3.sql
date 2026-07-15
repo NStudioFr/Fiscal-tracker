@@ -3,11 +3,18 @@
 -- =========================================================================
 -- Chaque règle est sourcée (colonne source_reference). Périmètre de ce lot :
 --   - TVA (4 taux)
---   - CSG déductible / non déductible + CRDS sur salaire
---   - Cotisation vieillesse salariale (plafonnée / déplafonnée)
+--   - CSG déductible / non déductible + CRDS sur salaire, AVEC plafonnement
+--     réel de l'abattement de 1,75 % à 4 PMSS/mois
+--   - Cotisation vieillesse salariale (plafonnée / déplafonnée), AVEC
+--     plafonnement réel de la part plafonnée au PMSS
 --   - Barème de l'impôt sur le revenu 2026 (revenus 2025)
 --   - TICPE essence SP95-E5 et gazole (taux national, hors majoration régionale)
 --   - Quelques catégories produit d'exemple (mapping non exhaustif à ce stade)
+--
+-- Le plafonnement s'appuie sur de nouveaux paramètres de référence versionnés
+-- (table parametre_reference / valeur_parametre_reference), utilisables comme
+-- variables dans n'importe quelle règle de type 'formule' — voir
+-- fiscal_engine/parameters.py.
 --
 -- HORS PÉRIMÈTRE (limitation assumée, cf. PROJECT_STATE.md) :
 --   - Majoration régionale de la TICPE (chaque région peut moduler dans une
@@ -83,43 +90,67 @@ SELECT id, '2014-01-01', NULL, 'taux_fixe', 0.021, 'ttc_inclus', 'Art. 281 quate
 FROM prelevement WHERE code = 'TVA_PARTICULIER';
 
 -- =========================================================================
+-- Paramètres de référence versionnés (utilisés comme seuils/plafonds
+-- dans les formules ci-dessous)
+-- =========================================================================
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PMSS_MENSUEL', 'Plafond mensuel de la Sécurité sociale', 'Monthly Social Security ceiling', 'Techo mensual de la Seguridad Social');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PLAFOND_ABATTEMENT_CSG_CRDS_MENSUEL', 'Plafond mensuel de l''abattement de 1,75 % pour frais professionnels (CSG/CRDS)', 'Monthly cap of the 1.75% standard deduction (CSG/CRDS)', 'Techo mensual de la deducción del 1,75 % (CSG/CRDS)');
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 4005.0, 'Arrêté relatif aux valeurs 2026 du plafond de la Sécurité sociale'
+FROM parametre_reference WHERE code = 'PMSS_MENSUEL';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 16020.0, 'Égal à 4 PMSS 2026 (4 x 4005 €) — Art. L136-8 CSS pour le principe du plafonnement de l''abattement'
+FROM parametre_reference WHERE code = 'PLAFOND_ABATTEMENT_CSG_CRDS_MENSUEL';
+
+-- =========================================================================
 -- CSG / CRDS sur salaire
 -- =========================================================================
 -- Assiette commune : 98,25 % du salaire brut (abattement forfaitaire de
--- 1,75 % pour frais professionnels, dans la limite de 4 PMSS/mois).
--- On modélise via type_regle = 'formule' pour intégrer cet abattement
--- directement (assiette = base_directe n'aurait pas permis l'abattement).
+-- 1,75 % pour frais professionnels), MAIS cet abattement est plafonné à
+-- 4 PMSS/mois : au-delà de ce seuil, la part excédentaire du salaire est
+-- soumise à CSG/CRDS sur 100 % (pas d'abattement).
+-- Formule : (min(base, PLAFOND) * 0.9825 + max(base - PLAFOND, 0) * 1) * taux
+--   - Si base <= PLAFOND : équivaut à base * 0.9825 * taux (abattement plein)
+--   - Si base >  PLAFOND : la part au-delà du plafond n'a pas d'abattement
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
 SELECT 'FR', id, 'CSG_DEDUCTIBLE', 'CSG déductible', 'Deductible CSG', 'CSG deducible',
-       'Salaire brut mensuel (abattement 1,75 % appliqué)', 'Art. L136-1 et s. CSS'
+       'Salaire brut mensuel (abattement 1,75 % plafonné à 4 PMSS)', 'Art. L136-1 et s. CSS'
 FROM typologie_prelevement WHERE code = 'COTIS_SOC';
 
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
 SELECT 'FR', id, 'CSG_NON_DEDUCTIBLE', 'CSG non déductible', 'Non-deductible CSG', 'CSG no deducible',
-       'Salaire brut mensuel (abattement 1,75 % appliqué)', 'Art. L136-1 et s. CSS'
+       'Salaire brut mensuel (abattement 1,75 % plafonné à 4 PMSS)', 'Art. L136-1 et s. CSS'
 FROM typologie_prelevement WHERE code = 'COTIS_SOC';
 
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
 SELECT 'FR', id, 'CRDS', 'CRDS', 'CRDS (social debt repayment contribution)', 'CRDS',
-       'Salaire brut mensuel (abattement 1,75 % appliqué)', 'Ordonnance n°96-50 du 24/01/1996'
+       'Salaire brut mensuel (abattement 1,75 % plafonné à 4 PMSS)', 'Ordonnance n°96-50 du 24/01/1996'
 FROM typologie_prelevement WHERE code = 'COTIS_SOC';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
-SELECT id, '2018-01-01', NULL, 'formule', 'base * 0.9825 * 0.068',
-       'Art. L136-8 CSS — taux inchangé depuis la LFSS 2018 (relèvement de 7,5 % à 9,2 % du taux global de CSG)',
-       'Assiette = 98,25% du brut, valable jusqu''à 4 PMSS/mois ; au-delà, assiette = 100% du brut (non géré dans ce lot)'
+SELECT id, '2026-01-01', NULL, 'formule',
+       '(min(base, PLAFOND_ABATTEMENT_CSG_CRDS_MENSUEL) * 0.9825 + max(base - PLAFOND_ABATTEMENT_CSG_CRDS_MENSUEL, 0)) * 0.068',
+       'Art. L136-8 CSS — taux inchangé depuis la LFSS 2018 ; plafond d''abattement = 4 PMSS 2026',
+       'Abattement de 1,75% plafonné à 4 PMSS/mois (16020 € en 2026), conformément à la réglementation URSSAF'
 FROM prelevement WHERE code = 'CSG_DEDUCTIBLE';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
-SELECT id, '2018-01-01', NULL, 'formule', 'base * 0.9825 * 0.024',
-       'Art. L136-8 CSS — taux inchangé depuis la LFSS 2018',
-       'Assiette = 98,25% du brut, valable jusqu''à 4 PMSS/mois'
+SELECT id, '2026-01-01', NULL, 'formule',
+       '(min(base, PLAFOND_ABATTEMENT_CSG_CRDS_MENSUEL) * 0.9825 + max(base - PLAFOND_ABATTEMENT_CSG_CRDS_MENSUEL, 0)) * 0.024',
+       'Art. L136-8 CSS — taux inchangé depuis la LFSS 2018 ; plafond d''abattement = 4 PMSS 2026',
+       'Abattement de 1,75% plafonné à 4 PMSS/mois (16020 € en 2026)'
 FROM prelevement WHERE code = 'CSG_NON_DEDUCTIBLE';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
-SELECT id, '1996-02-01', NULL, 'formule', 'base * 0.9825 * 0.005',
-       'Ordonnance n°96-50 du 24/01/1996 — taux de 0,5 % inchangé depuis la création de la CRDS',
-       'Assiette = 98,25% du brut, valable jusqu''à 4 PMSS/mois'
+SELECT id, '2026-01-01', NULL, 'formule',
+       '(min(base, PLAFOND_ABATTEMENT_CSG_CRDS_MENSUEL) * 0.9825 + max(base - PLAFOND_ABATTEMENT_CSG_CRDS_MENSUEL, 0)) * 0.005',
+       'Ordonnance n°96-50 du 24/01/1996 — taux de 0,5 % inchangé ; plafond d''abattement = 4 PMSS 2026',
+       'Abattement de 1,75% plafonné à 4 PMSS/mois (16020 € en 2026)'
 FROM prelevement WHERE code = 'CRDS';
 
 -- =========================================================================
@@ -127,7 +158,7 @@ FROM prelevement WHERE code = 'CRDS';
 -- =========================================================================
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
 SELECT 'FR', id, 'COTIS_VIEILLESSE_PLAF', 'Cotisation vieillesse plafonnée (salariale)', 'Old-age pension contribution (capped, employee share)', 'Cotización de vejez limitada (parte del asalariado)',
-       'Salaire brut mensuel, dans la limite du plafond mensuel de la Sécurité sociale (PMSS)', 'Art. L241-3 CSS'
+       'Salaire brut mensuel, plafonné au PMSS', 'Art. L241-3 CSS'
 FROM typologie_prelevement WHERE code = 'COTIS_SOC';
 
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
@@ -135,10 +166,14 @@ SELECT 'FR', id, 'COTIS_VIEILLESSE_DEPLAF', 'Cotisation vieillesse déplafonnée
        'Salaire brut mensuel intégral', 'Art. L241-3 CSS'
 FROM typologie_prelevement WHERE code = 'COTIS_SOC';
 
-INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference, commentaire)
-SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.069, 'base_directe',
-       'Art. L241-3 CSS, taux 2026',
-       'Assiette plafonnée au PMSS (4005 €/mois en 2026) — plafonnement non géré automatiquement dans ce lot : à appliquer manuellement si le salaire dépasse le PMSS'
+-- Plafonnée : le taux ne s'applique que sur la part du salaire jusqu'au PMSS
+-- (ex : sur un salaire de 5000€/mois avec un PMSS à 4005€, la cotisation
+-- porte sur 4005€, pas sur 5000€). Exprimé via 'formule' pour réutiliser le
+-- paramètre PMSS_MENSUEL plutôt que d'ajouter une colonne dédiée au schéma.
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'min(base, PMSS_MENSUEL) * 0.069',
+       'Art. L241-3 CSS, taux 2026 ; plafond = PMSS 2026 (4005 €/mois)',
+       'La cotisation ne porte que sur la part du salaire brut inférieure ou égale au PMSS'
 FROM prelevement WHERE code = 'COTIS_VIEILLESSE_PLAF';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
