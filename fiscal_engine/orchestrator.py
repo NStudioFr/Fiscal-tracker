@@ -69,7 +69,13 @@ def traiter_ligne_document(conn: sqlite3.Connection, ligne_document_id: int, dat
         for row in prelevements:
             prelevement_id = row["prelevement_id"]
             regle = resoudre_regle(conn, prelevement_id, date_reference)
-            resultat = calculer_montant(conn, regle, base=ligne["montant"])
+            resultat = calculer_montant(
+                conn,
+                regle,
+                montant=ligne["montant"],
+                quantite=ligne["quantite"],
+                unite_quantite=ligne["unite_quantite"],
+            )
             id_insere = _enregistrer(
                 conn,
                 ligne_document_id=ligne_document_id,
