@@ -46,3 +46,15 @@ class UniteIncompatible(FiscalEngineError):
     la ligne fournit des kilos). Le moteur ne doit jamais deviner une
     conversion arbitraire entre deux dimensions physiques différentes.
     """
+
+
+class AucuneValeurParametreApplicable(FiscalEngineError):
+    """Levée quand un paramètre de référence (ex : PMSS) est demandé
+    explicitement à une date pour laquelle aucune valeur n'est définie.
+    Note : lors du chargement groupé des paramètres pour l'évaluation d'une
+    formule (fiscal_engine.parameters.charger_parametres_disponibles), un
+    paramètre sans valeur à la date donnée est simplement omis plutôt que de
+    lever cette exception — s'il est réellement utilisé dans la formule,
+    l'erreur remonte alors naturellement via FormuleInvalide ('variable
+    inconnue'), ce qui est un message plus actionnable pour l'utilisateur.
+    """
