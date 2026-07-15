@@ -1,17 +1,28 @@
 """Calcul du montant d'un prélèvement, une fois la règle applicable résolue.
 
 Ce module ne fait AUCUN choix de règle (c'est le rôle de resolver.py) : il se
-contente d'appliquer une règle déjà déterminée à une base de calcul donnée.
-Séparer les deux responsabilités permet de tester le calcul indépendamment
-de la logique de résolution temporelle.
+contente d'appliquer une règle déjà déterminée aux données d'une ligne de
+document. Séparer les deux responsabilités permet de tester le calcul
+indépendamment de la logique de résolution temporelle.
+
+Quatre types de règles sont gérés, chacun utilisant une donnée différente de
+la ligne comme assiette :
+  - 'taux_fixe' (assiette 'base_directe' ou 'ttc_inclus') : utilise `montant`.
+  - 'montant_fixe' : ignore `montant`/`quantite`, renvoie un montant constant.
+  - 'formule' : utilise `montant` ET `quantite`, disponibles comme variables
+    'base' et 'quantite' dans la formule (ex : une taxe combinant un montant
+    et un volume).
+  - 'montant_par_unite' : utilise `quantite` (ex : nombre de litres), PAS
+    `montant`. Nécessite que l'unité de la ligne (`unite_quantite`) soit
+    compatible avec l'unité de la règle (`unite`) — voir units.py.
 
 Point d'attention (corrigé suite à revue) : pour les règles de type
 'taux_fixe', deux cas de figure existent et sont distingués via la colonne
 `assiette` de regle_prelevement :
-  - 'base_directe' : le taux s'applique tel quel sur la base fournie.
+  - 'base_directe' : le taux s'applique tel quel sur le montant fourni.
     Cas typique : une cotisation calculée sur un salaire brut affiché en
     clair sur une fiche de paie.
-  - 'ttc_inclus'   : la base fournie est déjà TTC et contient le
+  - 'ttc_inclus'   : le montant fourni est déjà TTC et contient le
     prélèvement ; il faut l'EXTRAIRE, pas l'ajouter par-dessus.
     Cas typique : la TVA sur un article de ticket de caisse, où le prix
     affiché (ex : 10,00 €) est déjà toutes taxes comprises.
@@ -21,21 +32,41 @@ import sqlite3
 
 from .exceptions import DonneesBaremeManquantes
 from .formula import evaluer_formule
+from .units import convertir_quantite
 
 
-def calculer_montant(conn: sqlite3.Connection, regle: sqlite3.Row, base: float) -> dict:
-    """Calcule le montant d'un prélèvement pour une règle et une base données.
+def calculer_montant(
+    conn: sqlite3.Connection,
+    regle: sqlite3.Row,
+    montant: float,
+    quantite: float = 1.0,
+    unite_quantite: str = "unite",
+) -> dict:
+    """Calcule le montant d'un prélèvement pour une règle et une ligne données.
 
     Args:
         conn: connexion SQLite (nécessaire pour aller chercher les tranches
             en cas de barème progressif).
         regle: ligne de `regle_prelevement` (issue de resolver.resoudre_regle).
-        base: montant de base sur lequel le prélèvement s'applique (ex :
-            montant TTC d'une ligne de ticket, salaire brut mensuel...).
+        montant: montant en euros de la ligne (ex : montant TTC d'une ligne
+            de ticket, salaire brut mensuel...). Utilisé par 'taux_fixe' et
+            'formule' (variable 'base').
+        quantite: quantité de la ligne dans l'unité `unite_quantite` (ex :
+            40.0 si la ligne représente 40 litres). Utilisée par
+            'montant_par_unite' et disponible dans 'formule' (variable
+            'quantite'). Vaut 1.0 par défaut pour les lignes sans notion de
+            quantité physique (ex : une ligne de cotisation sociale).
+        unite_quantite: unité dans laquelle `quantite` est exprimée (ex :
+            'L', 'kg', 'unite'). Voir fiscal_engine.units pour les unités
+            reconnues.
 
     Returns:
         Un dict {"montant": float, "base_calcul": float, "taux_applique": float | None}
-        prêt à être inséré dans la table `prelevement_calcule`.
+        prêt à être inséré dans la table `prelevement_calcule`. Pour une
+        règle 'montant_par_unite', "base_calcul" contient la quantité
+        convertie dans l'unité de la règle, et "taux_applique" contient le
+        montant unitaire appliqué (réutilisation du champ, pas un taux au
+        sens strict).
     """
     type_regle = regle["type_regle"]
 
@@ -44,28 +75,33 @@ def calculer_montant(conn: sqlite3.Connection, regle: sqlite3.Row, base: float) 
         assiette = regle["assiette"]
 
         if assiette == "ttc_inclus":
-            # `base` est un montant TTC qui contient déjà le prélèvement.
-            # Montant HT (hors ce prélèvement) = base / (1 + taux)
-            # Montant du prélèvement inclus     = base - montant_HT
+            # `montant` est un montant TTC qui contient déjà le prélèvement.
+            # Montant HT (hors ce prélèvement) = montant / (1 + taux)
+            # Montant du prélèvement inclus     = montant - montant_HT
             # Ex : 10€ TTC à 20% de TVA -> HT = 8.33€, TVA incluse = 1.67€
-            base_hors_prelevement = base / (1 + taux)
-            montant = base - base_hors_prelevement
-            return {"montant": montant, "base_calcul": base_hors_prelevement, "taux_applique": taux}
+            base_hors_prelevement = montant / (1 + taux)
+            montant_calcule = montant - base_hors_prelevement
+            return {"montant": montant_calcule, "base_calcul": base_hors_prelevement, "taux_applique": taux}
 
         # assiette == "base_directe" : le taux s'applique tel quel
-        montant = base * taux
-        return {"montant": montant, "base_calcul": base, "taux_applique": taux}
+        montant_calcule = montant * taux
+        return {"montant": montant_calcule, "base_calcul": montant, "taux_applique": taux}
 
     if type_regle == "montant_fixe":
-        return {"montant": regle["montant_fixe"], "base_calcul": base, "taux_applique": None}
+        return {"montant": regle["montant_fixe"], "base_calcul": montant, "taux_applique": None}
 
     if type_regle == "formule":
-        montant = evaluer_formule(regle["formule"], {"base": base})
-        return {"montant": montant, "base_calcul": base, "taux_applique": None}
+        montant_calcule = evaluer_formule(regle["formule"], {"base": montant, "quantite": quantite})
+        return {"montant": montant_calcule, "base_calcul": montant, "taux_applique": None}
+
+    if type_regle == "montant_par_unite":
+        quantite_convertie = convertir_quantite(quantite, unite_quantite, regle["unite"])
+        montant_calcule = quantite_convertie * regle["montant_unitaire"]
+        return {"montant": montant_calcule, "base_calcul": quantite_convertie, "taux_applique": regle["montant_unitaire"]}
 
     if type_regle == "bareme_progressif":
-        montant, taux_marginal = _calculer_bareme_progressif(conn, regle["id"], base)
-        return {"montant": montant, "base_calcul": base, "taux_applique": taux_marginal}
+        montant_calcule, taux_marginal = _calculer_bareme_progressif(conn, regle["id"], montant)
+        return {"montant": montant_calcule, "base_calcul": montant, "taux_applique": taux_marginal}
 
     raise ValueError(f"type_regle inconnu : {type_regle!r}")  # ne devrait jamais arriver (contrainte CHECK en base)
 
