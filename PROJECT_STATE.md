@@ -11,17 +11,23 @@
   si dimensions incompatibles, ex : L vs kg)
 
 ## Modules terminés
-- [x] Points 1-2 (voir historique précédent)
-- [x] Point 3 : foyer fiscal → quotient familial → décote — 39/39 tests passent
-  - Nouveau module fiscal_engine/foyer.py (SituationFoyer, calculer_nombre_parts,
-    calculer_impot_foyer) — orchestration haut niveau au-dessus du moteur générique
-  - Nouveaux paramètres versionnés : PLAFOND_QF_DEMI_PART (1807€), 
-    PLAFOND_QF_PARENT_ISOLE_1ER_ENFANT (4262€), DECOTE_SEUIL/FORFAIT_CELIBATAIRE/COUPLE,
-    DECOTE_TAUX (0,4525) — revenus 2025, sourcés LégiFiscal (citant BOFiP 07/04/2026) + 
-    Meilleurtaux Placement (deux sources indépendantes, cohérentes mathématiquement)
-  - Validé : décote à l'euro près (444,50€ pour impôt brut 1000€ célibataire) et
-    plafonnement QF exact (avantage brut 6896€ écrêté à 3614€ = 2×1807€ pour un couple
-    2 enfants à 90000€)
+- [x] Points 1-3 (voir historique précédent)
+- [x] Point 4 : régime micro-entrepreneur — 46/46 tests passent
+  - Nouveau module fiscal_engine/independant.py (calculer_cotisations_micro,
+    calculer_versement_liberatoire, calculer_revenu_imposable_micro)
+  - 3 catégories d'activité : vente (12,3%), services BIC (21,2%), BNC régime
+    général (25,6%) ; versement libératoire optionnel (1% / 1,7% / 2,2%) ;
+    abattements forfaitaires (71% / 50% / 34%)
+  - Validé mot pour mot contre 2 exemples officiels LegalPlace (Marie BNC
+    3000€ → 768€ cotis + 66€ VL = 834€ ; Claire BNC 36000€/an → 23760€ imposable)
+    et cohérence du taux combiné Service-Public.fr (13,3% vente)
+
+## Points ouverts / limitations assumées
+- Majoration régionale de la TICPE non gérée (taux national uniquement)
+- Quotient familial, décote, plafonnement IR non gérés
+- Plafonnement PMSS des cotisations non appliqué automatiquement
+- Régime des indépendants non couvert
+- Mapping catégorie produit → prélèvement encore très partiel (5 catégories d'exemple)
 
 ## Limites assumées de foyer.py (documentées dans le module)
 - Garde alternée non gérée (quart de part au lieu de demi-part)
@@ -32,13 +38,17 @@
 - Imposition séparée des époux/pacsés non gérée
 - revenu_net_imposable supposé déjà net (abattements/déductions non calculés ici)
 
-## Points ouverts / limitations assumées
-- Majoration régionale de la TICPE non gérée (taux national uniquement)
-- Quotient familial, décote, plafonnement IR non gérés
-- Plafonnement PMSS des cotisations non appliqué automatiquement
-- Régime des indépendants non couvert
-- Mapping catégorie produit → prélèvement encore très partiel (5 catégories d'exemple)
+## Limites assumées de independant.py (documentées dans le module)
+- Régime réel (BIC/BNC au réel) non couvert — système comptable complet, hors périmètre
+- Taux CIPAV non modélisé séparément (utiliser 'bnc' sous-estime les CIPAV)
+- Location de meublés de tourisme classés (6%), ACRE, plafonds de CA du régime
+  micro, éligibilité RFR au versement libératoire : non gérés
 
-## Prochaine étape (ordre convenu)
-Point 4 : régime des indépendants (micro/réel) — dernier point de l'ordre initial,
-volontairement isolé car autonome
+## Ordre de traitement initial (convenu il y a plusieurs échanges) — TERMINÉ
+1. ✅ Plafonnement générique (PMSS)
+2. ✅ Taxes écologiques par quantité + impôts locaux
+3. ✅ Foyer fiscal → quotient familial → décote
+4. ✅ Régime des indépendants
+
+## Prochaine étape
+Le mapping produits (tâche de fond, en continu) ou le lot OCR/parsing de documents
