@@ -12,9 +12,12 @@ Modules :
     foyer         — calcul de l'impôt sur le revenu d'un foyer complet : quotient
                     familial, plafonnement de son avantage, décote (orchestration
                     de haut niveau au-dessus du moteur générique)
+    independant   — cotisations et impôt d'un micro-entrepreneur (cotisations
+                    sociales, abattement forfaitaire, versement libératoire).
+                    Le régime réel (BIC/BNC au réel) n'est PAS couvert.
     orchestrator  — orchestration complète pour une ligne de document
     aggregator    — requêtes de reporting (totaux, ventilations)
     exceptions    — exceptions spécifiques au moteur
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
