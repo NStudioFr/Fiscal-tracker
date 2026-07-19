@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fiscal_engine import db, resolver, calculator, orchestrator, aggregator, formula, units, parameters, foyer
+from fiscal_engine import db, resolver, calculator, orchestrator, aggregator, formula, units, parameters, foyer, independant
 from fiscal_engine.exceptions import (
     AucuneRegleApplicable,
     ReglesChevauchantes,
@@ -198,6 +198,48 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
            VALUES (?, '2026-01-01', NULL, 'montant_declare', 'Test - montant declare')""",
         (id_prelevement_declaree,),
     )
+
+    # Prélèvements et paramètres de test pour le régime micro-entrepreneur
+    # (valeurs rondes de test, PAS les vrais taux 2026 — voir
+    # seed_data/fr_seed_lot3.sql pour les vraies valeurs sourcées).
+    for code, taux in (("MICRO_COTIS_VENTE", 0.10), ("MICRO_COTIS_SERVICES_BIC", 0.20), ("MICRO_COTIS_BNC", 0.30)):
+        conn.execute(
+            "INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale) VALUES ('FR', ?, ?, ?, 'Test')",
+            (id_typo_ir, code, code),
+        )
+        pid = conn.execute("SELECT id FROM prelevement WHERE code = ?", (code,)).fetchone()["id"]
+        conn.execute(
+            """INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+               VALUES (?, '2026-01-01', NULL, 'taux_fixe', ?, 'base_directe', 'Test')""",
+            (pid, taux),
+        )
+
+    for code, taux in (("MICRO_VL_VENTE", 0.01), ("MICRO_VL_SERVICES_BIC", 0.02), ("MICRO_VL_BNC", 0.03)):
+        conn.execute(
+            "INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale) VALUES ('FR', ?, ?, ?, 'Test')",
+            (id_typo_ir, code, code),
+        )
+        pid = conn.execute("SELECT id FROM prelevement WHERE code = ?", (code,)).fetchone()["id"]
+        conn.execute(
+            """INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+               VALUES (?, '2026-01-01', NULL, 'taux_fixe', ?, 'base_directe', 'Test')""",
+            (pid, taux),
+        )
+
+    for code, valeur in (
+        ("ABATTEMENT_MICRO_VENTE", 0.70),
+        ("ABATTEMENT_MICRO_SERVICES_BIC", 0.50),
+        ("ABATTEMENT_MICRO_BNC", 0.30),
+    ):
+        conn.execute(
+            "INSERT INTO parametre_reference (pays_code, code, libelle_fr) VALUES ('FR', ?, ?)", (code, code)
+        )
+        pid = conn.execute("SELECT id FROM parametre_reference WHERE code = ?", (code,)).fetchone()["id"]
+        conn.execute(
+            """INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+               VALUES (?, '2026-01-01', NULL, ?, 'Test')""",
+            (pid, valeur),
+        )
 
     conn.execute(
         """INSERT INTO categorie_produit (code, libelle_fr, type_depense_id)
@@ -551,6 +593,40 @@ class TestFoyerFiscal(unittest.TestCase):
         decote_attendue = max(300.0 - 0.5 * impot_avant_decote, 0.0)
         self.assertAlmostEqual(resultat["decote"], decote_attendue)
         self.assertAlmostEqual(resultat["impot_final"], 0.0)  # decote (272.5) > impot brut (55) -> plafonne a 0
+
+
+class TestIndependant(unittest.TestCase):
+    def setUp(self):
+        self.conn = _creer_bdd_test()
+        self.ids = _inserer_donnees_de_base(self.conn)
+
+    def test_type_activite_invalide(self):
+        with self.assertRaises(ValueError):
+            independant.calculer_cotisations_micro(self.conn, "inconnu", 1000.0, "2026-06-01")
+
+    def test_cotisations_vente(self):
+        r = independant.calculer_cotisations_micro(self.conn, "vente", 1000.0, "2026-06-01")
+        self.assertAlmostEqual(r["montant"], 100.0)  # 1000 * 0.10 (taux de test)
+
+    def test_cotisations_services_bic(self):
+        r = independant.calculer_cotisations_micro(self.conn, "services_bic", 1000.0, "2026-06-01")
+        self.assertAlmostEqual(r["montant"], 200.0)  # 1000 * 0.20
+
+    def test_cotisations_bnc(self):
+        r = independant.calculer_cotisations_micro(self.conn, "bnc", 1000.0, "2026-06-01")
+        self.assertAlmostEqual(r["montant"], 300.0)  # 1000 * 0.30
+
+    def test_versement_liberatoire(self):
+        r = independant.calculer_versement_liberatoire(self.conn, "bnc", 1000.0, "2026-06-01")
+        self.assertAlmostEqual(r["montant"], 30.0)  # 1000 * 0.03 (taux de test)
+
+    def test_revenu_imposable_avec_abattement(self):
+        revenu = independant.calculer_revenu_imposable_micro(self.conn, "vente", 10000.0, "2026-06-01")
+        self.assertAlmostEqual(revenu, 3000.0)  # 10000 * (1 - 0.70)
+
+    def test_revenu_imposable_bnc(self):
+        revenu = independant.calculer_revenu_imposable_micro(self.conn, "bnc", 10000.0, "2026-06-01")
+        self.assertAlmostEqual(revenu, 7000.0)  # 10000 * (1 - 0.30)
 
 
 class TestMontantDeclare(unittest.TestCase):
