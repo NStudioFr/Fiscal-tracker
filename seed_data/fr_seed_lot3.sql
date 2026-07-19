@@ -430,5 +430,92 @@ SELECT cp.id, p.id FROM categorie_produit cp, prelevement p
 WHERE cp.code = 'GAZ_NATUREL_CHAUFFAGE' AND p.code = 'TICGN';
 
 -- =========================================================================
+-- Régime micro-entrepreneur (auto-entrepreneur) — voir fiscal_engine/independant.py
+-- =========================================================================
+-- Périmètre : 3 catégories d'activité (vente, services BIC, BNC régime
+-- général). Le taux CIPAV, la location de meublés de tourisme classés,
+-- l'ACRE, et le régime réel ne sont PAS couverts (voir limites détaillées
+-- dans independant.py).
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'MICRO_COTIS_VENTE', 'Cotisations sociales micro-entrepreneur (vente de marchandises)', 'Micro-entrepreneur social contributions (sale of goods)', 'Cotizaciones sociales de microempresario (venta de mercancías)',
+       'Chiffre d''affaires encaissé sur la période déclarée', 'Décret n°2024-484 du 30/05/2024, taux 2026'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'MICRO_COTIS_SERVICES_BIC', 'Cotisations sociales micro-entrepreneur (prestations de services BIC)', 'Micro-entrepreneur social contributions (BIC services)', 'Cotizaciones sociales de microempresario (servicios BIC)',
+       'Chiffre d''affaires encaissé sur la période déclarée', 'Décret n°2024-484 du 30/05/2024, taux 2026'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'MICRO_COTIS_BNC', 'Cotisations sociales micro-entrepreneur (professions libérales BNC, régime général)', 'Micro-entrepreneur social contributions (BNC, general scheme)', 'Cotizaciones sociales de microempresario (BNC, régimen general)',
+       'Chiffre d''affaires encaissé sur la période déclarée. Ne couvre PAS le taux spécifique CIPAV.', 'Décret n°2024-484 du 30/05/2024, taux 2026'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.123, 'base_directe', 'Décret n°2024-484 du 30/05/2024 — sources concordantes (Abby, LegalPlace, Subventions.fr) ; cohérent avec le taux combiné 13,3% du versement libératoire publié par Service-Public.fr (12,3+1)'
+FROM prelevement WHERE code = 'MICRO_COTIS_VENTE';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.212, 'base_directe', 'Décret n°2024-484 du 30/05/2024 — sources concordantes (Abby, LegalPlace, Subventions.fr, SimuAuto)'
+FROM prelevement WHERE code = 'MICRO_COTIS_SERVICES_BIC';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.256, 'base_directe', 'Décret n°2024-484 du 30/05/2024 — sources concordantes (Abby, LegalPlace, Subventions.fr). Taux CIPAV (23,2%) non modélisé séparément.'
+FROM prelevement WHERE code = 'MICRO_COTIS_BNC';
+
+-- Versement libératoire de l'IR (optionnel, sous condition de RFR non
+-- vérifiée par ce moteur — voir independant.py)
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'MICRO_VL_VENTE', 'Versement libératoire de l''IR (vente de marchandises)', 'Final withholding income tax option (sale of goods)', 'Pago liberatorio del IRPF (venta de mercancías)',
+       'Chiffre d''affaires encaissé, sur option et sous condition de revenu fiscal de référence', 'Art. 151-0 CGI'
+FROM typologie_prelevement WHERE code = 'IMPOT_REVENU';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'MICRO_VL_SERVICES_BIC', 'Versement libératoire de l''IR (prestations de services BIC)', 'Final withholding income tax option (BIC services)', 'Pago liberatorio del IRPF (servicios BIC)',
+       'Chiffre d''affaires encaissé, sur option et sous condition de revenu fiscal de référence', 'Art. 151-0 CGI'
+FROM typologie_prelevement WHERE code = 'IMPOT_REVENU';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'MICRO_VL_BNC', 'Versement libératoire de l''IR (professions libérales BNC)', 'Final withholding income tax option (BNC)', 'Pago liberatorio del IRPF (BNC)',
+       'Chiffre d''affaires encaissé, sur option et sous condition de revenu fiscal de référence', 'Art. 151-0 CGI'
+FROM typologie_prelevement WHERE code = 'IMPOT_REVENU';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.01, 'base_directe', 'Art. 151-0 CGI — sources concordantes (LegalPlace, Subventions.fr, SimuAuto) ; cohérent avec le taux combiné 13,3% de Service-Public.fr'
+FROM prelevement WHERE code = 'MICRO_VL_VENTE';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.017, 'base_directe', 'Art. 151-0 CGI — sources concordantes (LegalPlace, Subventions.fr, SimuAuto)'
+FROM prelevement WHERE code = 'MICRO_VL_SERVICES_BIC';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.022, 'base_directe', 'Art. 151-0 CGI — sources concordantes (LegalPlace, Subventions.fr, SimuAuto)'
+FROM prelevement WHERE code = 'MICRO_VL_BNC';
+
+-- Abattements forfaitaires pour frais professionnels (régime micro-fiscal
+-- classique, hors versement libératoire) — versionnés comme paramètres de
+-- référence car stables mais légalement susceptibles de changer.
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'ABATTEMENT_MICRO_VENTE', 'Abattement forfaitaire micro-entrepreneur (vente de marchandises)', 'Micro-entrepreneur standard deduction (sale of goods)', 'Deducción estándar de microempresario (venta de mercancías)');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'ABATTEMENT_MICRO_SERVICES_BIC', 'Abattement forfaitaire micro-entrepreneur (prestations de services BIC)', 'Micro-entrepreneur standard deduction (BIC services)', 'Deducción estándar de microempresario (servicios BIC)');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'ABATTEMENT_MICRO_BNC', 'Abattement forfaitaire micro-entrepreneur (professions libérales BNC)', 'Micro-entrepreneur standard deduction (BNC)', 'Deducción estándar de microempresario (BNC)');
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 0.71, 'Art. 50-0 CGI — sources concordantes (swim.legal, LegalPlace), stable depuis plusieurs années'
+FROM parametre_reference WHERE code = 'ABATTEMENT_MICRO_VENTE';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 0.50, 'Art. 50-0 CGI — sources concordantes (swim.legal, LegalPlace), stable depuis plusieurs années'
+FROM parametre_reference WHERE code = 'ABATTEMENT_MICRO_SERVICES_BIC';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 0.34, 'Art. 102 ter CGI — sources concordantes (swim.legal, LegalPlace, LegalPlace exemple Claire 36000E->23760E), stable depuis plusieurs années'
+FROM parametre_reference WHERE code = 'ABATTEMENT_MICRO_BNC';
+
+-- =========================================================================
 -- Fin du contenu fiscal — Lot 3
 -- =========================================================================
