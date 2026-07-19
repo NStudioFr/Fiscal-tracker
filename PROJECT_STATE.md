@@ -11,16 +11,18 @@
   si dimensions incompatibles, ex : L vs kg)
 
 ## Modules terminés
-- [x] Points 1-3 (voir historique précédent)
-- [x] Point 4 : régime micro-entrepreneur — 46/46 tests passent
-  - Nouveau module fiscal_engine/independant.py (calculer_cotisations_micro,
-    calculer_versement_liberatoire, calculer_revenu_imposable_micro)
-  - 3 catégories d'activité : vente (12,3%), services BIC (21,2%), BNC régime
-    général (25,6%) ; versement libératoire optionnel (1% / 1,7% / 2,2%) ;
-    abattements forfaitaires (71% / 50% / 34%)
-  - Validé mot pour mot contre 2 exemples officiels LegalPlace (Marie BNC
-    3000€ → 768€ cotis + 66€ VL = 834€ ; Claire BNC 36000€/an → 23760€ imposable)
-    et cohérence du taux combiné Service-Public.fr (13,3% vente)
+- [x] Points 1-4 du moteur fiscal (voir historique précédent) — 46/46 tests
+- [x] OCR + parsing fiche de paie (1/3 du lot ingestion) — 8/8 tests parser
+  - Nouveau package ingestion/ (ocr.py, fiche_paie.py), séparé de fiscal_engine/
+    (nature probabiliste vs déterministe)
+  - OCR : Tesseract local (+ pack langue fra installé), prétraitement simple
+    (niveaux de gris + contraste)
+  - Parsing fiche de paie : reconnaissance par mots-clés, normalisation des
+    accents (l'OCR perd souvent les diacritiques - bug détecté et corrigé
+    en testant avec une vraie image, pas juste du texte à la main)
+  - Pipeline complet validé de bout en bout : image → OCR → parsing → BDD
+    (statut 'a_valider' par défaut) → calcul fiscal tracé (test avec image
+    synthétique : 4/4 cotisations reconnues, total 557,97€ correctement calculé)
 
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
@@ -44,11 +46,19 @@
 - Location de meublés de tourisme classés (6%), ACRE, plafonds de CA du régime
   micro, éligibilité RFR au versement libératoire : non gérés
 
+## Limite connue et documentée (fiche_paie.py)
+CSG non déductible et CRDS apparaissent souvent combinées sur une ligne réelle
+("CSG/CRDS non déductible") : la ligne est attribuée entièrement à CSG_NON_DEDUCTIBLE,
+la CRDS n'est pas isolée séparément dans ce cas (le total reste correct, la
+ventilation par typologie est légèrement imprécise dans ce cas précis).
+
 ## Ordre de traitement initial (convenu il y a plusieurs échanges) — TERMINÉ
 1. ✅ Plafonnement générique (PMSS)
 2. ✅ Taxes écologiques par quantité + impôts locaux
 3. ✅ Foyer fiscal → quotient familial → décote
 4. ✅ Régime des indépendants
 
-## Prochaine étape
-Le mapping produits (tâche de fond, en continu) ou le lot OCR/parsing de documents
+## Prochaine étape (ordre convenu)
+2/3 : avis d'imposition / facture (montants déjà calculés, parsing plus simple)
+3/3 : ticket de caisse (le plus complexe — formats très variables — mais le
+plus important à bien affiner, usage quotidien le plus fréquent)
