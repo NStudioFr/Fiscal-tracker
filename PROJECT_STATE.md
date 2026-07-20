@@ -12,7 +12,7 @@
 
 ## Modules terminés
 - [x] Points 1-4 du moteur fiscal (voir historique précédent) — 46/46 tests
-- [x] OCR + parsing fiche de paie (1/3 du lot ingestion) — 8/8 tests parser
+- [x] OCR + parsing fiche de paie — 14/14 tests parser, 60/60 tests projet au total
   - Nouveau package ingestion/ (ocr.py, fiche_paie.py), séparé de fiscal_engine/
     (nature probabiliste vs déterministe)
   - OCR : Tesseract local (+ pack langue fra installé), prétraitement simple
@@ -23,6 +23,14 @@
   - Pipeline complet validé de bout en bout : image → OCR → parsing → BDD
     (statut 'a_valider' par défaut) → calcul fiscal tracé (test avec image
     synthétique : 4/4 cotisations reconnues, total 557,97€ correctement calculé)
+  - Correction majeure suite à un vrai bulletin QuickPaie.com :
+    extraction positionnelle du montant SALARIAL (jamais patronal), robuste aux formats
+    à 2 colonnes (simplifiés) ET 5 colonnes (base/taux_sal/montant_sal/taux_pat/montant_pat)
+  - Nouveaux alias ajoutés : "Retraite plafonnée/déplafonnée", "Dont déductible/non
+    déductible de l'impôt sur le revenu" (labels réels différents de ma première hypothèse)
+  - Validé sur deux images synthétiques passées dans un vrai OCR (format simple + format
+    réel à 5 colonnes) : tous les montants salariaux corrects, montants patronaux et
+    lignes 100% patronales correctement écartés
 
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
