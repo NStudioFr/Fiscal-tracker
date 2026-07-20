@@ -12,7 +12,12 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ingestion.fiche_paie import parser_fiche_paie
+from ingestion.fiche_paie import (
+    parser_fiche_paie,
+    _extraire_montant_salarial,
+    _identifier_code_prelevement,
+    _normaliser,
+)
 
 
 class TestParserFichePaie(unittest.TestCase):
@@ -78,6 +83,75 @@ class TestParserFichePaie(unittest.TestCase):
         self.assertIn("COTIS_VIEILLESSE_DEPLAF", codes_trouves)
         # 6 lignes ont un montant en fin de ligne (salaire de base, 4 cotisations, net à payer)
         self.assertEqual(len(lignes), 6)
+
+
+class TestParserFichePaieFormatReel(unittest.TestCase):
+    """Tests basés sur le texte d'un vrai bulletin de paie généré par un
+    logiciel de paie commercial (QuickPaie.com), avec colonnes salarial ET
+    patronal explicites et des taux à 4 décimales — révèle des cas que le
+    format simplifié de test (2 colonnes) ne couvrait pas.
+    """
+
+    def test_csg_deductible_ligne_reelle_sans_part_patronale(self):
+        # Ligne réelle : "Dont déductible de l'impôt sur le revenu   3 733,50   6,8000   253,88   -"
+        # Le tiret final indique l'absence de part patronale sur cette ligne.
+        ligne = "Dont déductible de l'impôt sur le revenu 3 733,50 6,8000 253,88 -"
+        montant = _extraire_montant_salarial(ligne)
+        self.assertAlmostEqual(montant, 253.88)
+        code = _identifier_code_prelevement(_normaliser(ligne))
+        self.assertEqual(code, "CSG_DEDUCTIBLE")
+
+    def test_csg_non_deductible_ligne_reelle(self):
+        ligne = "Dont non déductible de l'impôt sur le revenu 3 733,50 2,9000 108,27 -"
+        montant = _extraire_montant_salarial(ligne)
+        self.assertAlmostEqual(montant, 108.27)
+        code = _identifier_code_prelevement(_normaliser(ligne))
+        self.assertEqual(code, "CSG_NON_DEDUCTIBLE")
+
+    def test_retraite_plafonnee_avec_part_patronale_prend_bien_le_salarial(self):
+        # Ligne réelle avec LES DEUX parts : salarial (262,20) ET patronal (324,90).
+        # Le piège : prendre "le dernier nombre" donnerait 324,90 (patronal),
+        # alors qu'on veut 262,20 (salarial, ce que paie réellement la personne).
+        ligne = "Retraite plafonnée 3 800,00 6,9000 262,20 8,5500 324,90"
+        montant = _extraire_montant_salarial(ligne)
+        self.assertAlmostEqual(montant, 262.20)  # PAS 324.90
+        code = _identifier_code_prelevement(_normaliser(ligne))
+        self.assertEqual(code, "COTIS_VIEILLESSE_PLAF")
+
+    def test_retraite_deplafonnee_avec_part_patronale(self):
+        ligne = "Retraite déplafonnée 3 800,00 0,4000 15,20 2,0200 76,76"
+        montant = _extraire_montant_salarial(ligne)
+        self.assertAlmostEqual(montant, 15.20)  # PAS 76.76
+        code = _identifier_code_prelevement(_normaliser(ligne))
+        self.assertEqual(code, "COTIS_VIEILLESSE_DEPLAF")
+
+    def test_ligne_100_pourcent_patronale_sans_part_salariale_ignoree(self):
+        # "Allocations familiales" : taux salarial = "-" (aucune part salariale).
+        # Le module ne doit PAS extraire le taux/montant patronal par erreur.
+        ligne = "Allocations familiales 3 800,00 - 5,2500 199,50"
+        montant = _extraire_montant_salarial(ligne)
+        self.assertIsNone(montant)
+
+    def test_document_reel_quickpaie_extrait_les_bons_montants(self):
+        # Extrait fidèle (texte) du bulletin réel QuickPaie "Cadre Syntec +
+        # Titres restaurant" (01-marie-laurent.pdf), pour validation de bout
+        # en bout sur un format professionnel réel.
+        texte = (
+            "Salaire de base 151,67 25,0500 3 800,00\n"
+            "Cotisation maladie - maternité - invalidité - décès 3 800,00 0,0000 - 13,0000 494,00\n"
+            "Retraite plafonnée 3 800,00 6,9000 262,20 8,5500 324,90\n"
+            "Retraite déplafonnée 3 800,00 0,4000 15,20 2,0200 76,76\n"
+            "Dont déductible de l'impôt sur le revenu 3 733,50 6,8000 253,88 -\n"
+            "Dont non déductible de l'impôt sur le revenu 3 733,50 2,9000 108,27 -\n"
+        )
+        lignes = parser_fiche_paie(texte)
+        par_code = {l.code_prelevement: l.montant for l in lignes if l.code_prelevement}
+        self.assertAlmostEqual(par_code["COTIS_VIEILLESSE_PLAF"], 262.20)
+        self.assertAlmostEqual(par_code["COTIS_VIEILLESSE_DEPLAF"], 15.20)
+        self.assertAlmostEqual(par_code["CSG_DEDUCTIBLE"], 253.88)
+        self.assertAlmostEqual(par_code["CSG_NON_DEDUCTIBLE"], 108.27)
+        # La ligne "Cotisation maladie" n'a pas d'alias reconnu (hors périmètre),
+        # mais ne doit pas non plus faire planter le parsing.
 
 
 if __name__ == "__main__":
