@@ -31,6 +31,18 @@
   - Validé sur deux images synthétiques passées dans un vrai OCR (format simple + format
     réel à 5 colonnes) : tous les montants salariaux corrects, montants patronaux et
     lignes 100% patronales correctement écartés
+- [x] Refactor : ingestion/texte_utils.py (normalisation, extraction de nombres,
+  nettoyage des symboles monétaires) partagé entre tous les parsers
+- [x] OCR + parsing avis d'imposition / facture (2/3 du lot ingestion) — 73/73
+  tests au total sur le projet
+  - avis_imposition.py : reconnaît IR à payer/à rembourser (montant négatif),
+    taxe foncière, taxe d'habitation résidence secondaire — recherche par
+    libellé avec fenêtre de tolérance (label et montant pas toujours sur la
+    même ligne, bug détecté et corrigé en testant)
+  - facture.py : reconnaît les lignes de TVA par TAUX explicite (obligation
+    légale de facturation) plutôt que par libellé — plus robuste qu'une
+    approche par mots-clés pour ce type de document
+  - Les deux validés sur des images synthétiques passées dans un vrai OCR
 
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
@@ -67,6 +79,6 @@ ventilation par typologie est légèrement imprécise dans ce cas précis).
 4. ✅ Régime des indépendants
 
 ## Prochaine étape (ordre convenu)
-2/3 : avis d'imposition / facture (montants déjà calculés, parsing plus simple)
-3/3 : ticket de caisse (le plus complexe — formats très variables — mais le
-plus important à bien affiner, usage quotidien le plus fréquent)
+3/3 : ticket de caisse — le plus complexe (formats très variables d'une
+enseigne à l'autre) mais le plus important à bien affiner (usage quotidien
+le plus fréquent)
