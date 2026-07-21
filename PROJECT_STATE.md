@@ -12,37 +12,17 @@
 
 ## Modules terminés
 - [x] Points 1-4 du moteur fiscal (voir historique précédent) — 46/46 tests
-- [x] OCR + parsing fiche de paie — 14/14 tests parser, 60/60 tests projet au total
-  - Nouveau package ingestion/ (ocr.py, fiche_paie.py), séparé de fiscal_engine/
-    (nature probabiliste vs déterministe)
-  - OCR : Tesseract local (+ pack langue fra installé), prétraitement simple
-    (niveaux de gris + contraste)
-  - Parsing fiche de paie : reconnaissance par mots-clés, normalisation des
-    accents (l'OCR perd souvent les diacritiques - bug détecté et corrigé
-    en testant avec une vraie image, pas juste du texte à la main)
-  - Pipeline complet validé de bout en bout : image → OCR → parsing → BDD
-    (statut 'a_valider' par défaut) → calcul fiscal tracé (test avec image
-    synthétique : 4/4 cotisations reconnues, total 557,97€ correctement calculé)
-  - Correction majeure suite à un vrai bulletin QuickPaie.com :
-    extraction positionnelle du montant SALARIAL (jamais patronal), robuste aux formats
-    à 2 colonnes (simplifiés) ET 5 colonnes (base/taux_sal/montant_sal/taux_pat/montant_pat)
-  - Nouveaux alias ajoutés : "Retraite plafonnée/déplafonnée", "Dont déductible/non
-    déductible de l'impôt sur le revenu" (labels réels différents de ma première hypothèse)
-  - Validé sur deux images synthétiques passées dans un vrai OCR (format simple + format
-    réel à 5 colonnes) : tous les montants salariaux corrects, montants patronaux et
-    lignes 100% patronales correctement écartés
+- [x] OCR (Tesseract local, prétraitement gris+débruitage) + parsing des 4 types de
+  documents (fiche de paie, avis d'imposition, facture, ticket de caisse) — 84/84 tests
+  - ticket_caisse.py : bloc récapitulatif de TVA par taux (signal le plus fiable) +
+    totaux par catégorie ("Total Alimentaire"...) + détection indicative de rayons
+  - Validé sur 3 VRAIS tickets fournis par l'utilisateur (Carrefour x2, Magasin U) —
+    pipeline complet image → OCR → parsing → BDD → calcul fiscal tracé, exact au
+    centime près sur le ticket de bonne qualité (TVA totale : 3,74€)
+  - 3 bugs réels détectés et corrigés grâce à ces vrais tickets (prétraitement OCR,
+    regex de bloc TVA, fusion de milliers) — confirme la valeur de tester sur du réel
 - [x] Refactor : ingestion/texte_utils.py (normalisation, extraction de nombres,
   nettoyage des symboles monétaires) partagé entre tous les parsers
-- [x] OCR + parsing avis d'imposition / facture (2/3 du lot ingestion) — 73/73
-  tests au total sur le projet
-  - avis_imposition.py : reconnaît IR à payer/à rembourser (montant négatif),
-    taxe foncière, taxe d'habitation résidence secondaire — recherche par
-    libellé avec fenêtre de tolérance (label et montant pas toujours sur la
-    même ligne, bug détecté et corrigé en testant)
-  - facture.py : reconnaît les lignes de TVA par TAUX explicite (obligation
-    légale de facturation) plutôt que par libellé — plus robuste qu'une
-    approche par mots-clés pour ce type de document
-  - Les deux validés sur des images synthétiques passées dans un vrai OCR
 
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
@@ -50,6 +30,10 @@
 - Plafonnement PMSS des cotisations non appliqué automatiquement
 - Régime des indépendants non couvert
 - Mapping catégorie produit → prélèvement encore très partiel (5 catégories d'exemple)
+- Aucune identification produit par produit (relève du "mapping produits", hors périmètre pour l'instant)
+- Fiabilité entièrement dépendante de la qualité du scan/photo (démontré sur les 3
+  exemples fournis : très bon sur le ticket net, très partiel sur le ticket dégradé)
+- Rayons détectés = affichage indicatif seulement, aucun prélèvement n'en est déduit
 
 ## Limites assumées de foyer.py (documentées dans le module)
 - Garde alternée non gérée (quart de part au lieu de demi-part)
@@ -66,7 +50,7 @@
 - Location de meublés de tourisme classés (6%), ACRE, plafonds de CA du régime
   micro, éligibilité RFR au versement libératoire : non gérés
 
-## Limite connue et documentée (fiche_paie.py)
+## Limite connue et documentée de fiche_paie.py
 CSG non déductible et CRDS apparaissent souvent combinées sur une ligne réelle
 ("CSG/CRDS non déductible") : la ligne est attribuée entièrement à CSG_NON_DEDUCTIBLE,
 la CRDS n'est pas isolée séparément dans ce cas (le total reste correct, la
@@ -77,6 +61,16 @@ ventilation par typologie est légèrement imprécise dans ce cas précis).
 2. ✅ Taxes écologiques par quantité + impôts locaux
 3. ✅ Foyer fiscal → quotient familial → décote
 4. ✅ Régime des indépendants
+
+## État global du projet
+Moteur fiscal (Lots 1-4, Points 1-4) + ingestion complète (fiche de paie, avis
+d'imposition, facture, ticket de caisse) = les deux piliers du projet sont posés.
+
+## Prochaines pistes possibles
+- UI (saisie, dashboard, exports)
+- Enrichissement du mapping produits (tâche de fond)
+- Autres prélèvements FR (taxe d'habitation, régime réel indépendant...)
+- Import Open Food Facts pour enrichir l'identification produit
 
 ## Prochaine étape (ordre convenu)
 3/3 : ticket de caisse — le plus complexe (formats très variables d'une
