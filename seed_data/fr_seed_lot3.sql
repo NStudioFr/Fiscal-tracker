@@ -52,6 +52,7 @@ INSERT INTO type_depense (code, libelle_fr, libelle_en, libelle_es) VALUES
     ('CARBURANT',    'Carburant',           'Fuel',           'Combustible'),
     ('ENERGIE',      'Énergie du logement (gaz, électricité)', 'Home energy (gas, electricity)', 'Energía del hogar (gas, electricidad)'),
     ('LOGEMENT',     'Logement (taxes et impôts locaux)', 'Housing (local taxes)', 'Vivienda (impuestos locales)'),
+    ('HYGIENE_ENTRETIEN', 'Hygiène, beauté et entretien', 'Hygiene, beauty and household cleaning', 'Higiene, belleza y limpieza del hogar'),
     ('SALAIRE',      'Salaire',             'Salary',         'Salario'),
     ('AUTRE',        'Autres dépenses',     'Other expenses', 'Otros gastos');
 
