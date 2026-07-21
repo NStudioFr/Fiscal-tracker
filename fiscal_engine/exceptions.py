@@ -58,3 +58,13 @@ class AucuneValeurParametreApplicable(FiscalEngineError):
     l'erreur remonte alors naturellement via FormuleInvalide ('variable
     inconnue'), ce qui est un message plus actionnable pour l'utilisateur.
     """
+
+
+class AucuneTrancheApplicable(FiscalEngineError):
+    """Levée pour une règle de type 'bareme_a_seuil' quand la valeur de
+    seuil fournie ne tombe dans AUCUNE des tranches définies (ex : valeur
+    négative, ou bornes mal renseignées laissant un trou de couverture).
+    Différent de DonneesBaremeManquantes : ici des tranches EXISTENT, mais
+    aucune ne couvre la valeur fournie — signale une lacune de données à
+    corriger, jamais à contourner par une valeur par défaut arbitraire.
+    """
