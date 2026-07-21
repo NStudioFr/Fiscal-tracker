@@ -109,3 +109,24 @@ def extraire_texte_image(
     """
     image_pretraitee = _pretraiter_avec_cv2(chemin_image) if _CV2_DISPONIBLE else _pretraiter_avec_pil(chemin_image)
     return pytesseract.image_to_string(image_pretraitee, lang=langue, config=f"--psm {psm}")
+
+
+def extraire_texte_avec_diagnostic(
+    chemin_image: str | Path, langue: str = LANGUE_PAR_DEFAUT, psm: int = 4
+):
+    """Point d'entrée recommandé pour une interface utilisateur : renvoie à
+    la fois le texte OCR ET un diagnostic de qualité prêt à afficher.
+
+    Contrairement à extraire_texte_image (texte seul), cette fonction permet
+    à l'appelant de savoir si le résultat est fiable avant de le présenter
+    à l'utilisateur comme s'il était certain — voir ingestion.qualite pour
+    le détail du diagnostic (seuils calibrés sur de vrais tickets de caisse).
+
+    Returns:
+        Un tuple (texte: str, diagnostic: ingestion.qualite.DiagnosticQualite).
+    """
+    from .qualite import diagnostiquer_qualite  # import local pour éviter un cycle (qualite importe déjà ocr)
+
+    texte = extraire_texte_image(chemin_image, langue=langue, psm=psm)
+    diagnostic = diagnostiquer_qualite(chemin_image, langue=langue, psm=psm)
+    return texte, diagnostic
