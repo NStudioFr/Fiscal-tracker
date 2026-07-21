@@ -29,6 +29,12 @@
   - extraire_texte_avec_diagnostic() : point d'entrée recommandé pour l'UI, renvoie
     texte + niveau (bon/moyen/insuffisant) + messages d'avertissement en français
   - Jamais bloquant : le document reste 'a_valider', l'utilisateur décide
+- [x] Mécanisme bareme_a_seuil + CSG/CRDS/CASA retraite — 99/99 tests au total
+  - Nouveau type_regle générique, réutilisable pour d'autres prélèvements à seuil futurs
+  - fiscal_engine/retraite.py : orchestration CSG→CRDS→CASA avec conditionnement
+  - ATTENTION : seuils RFR 2026 estimés par recoupement de sources (non vérifiés sur
+    texte réglementaire officiel) — à vérifier par l'utilisateur sur son avis d'imposition
+  - Limites : foyers 1 ou 2 parts seulement ; pas de mécanisme de lissage
 
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
@@ -79,8 +85,7 @@ d'imposition, facture, ticket de caisse) = les deux piliers du projet sont posé
 - Import Open Food Facts pour enrichir l'identification produit
 
 ## Prochaine étape (ordre convenu)
-1. Autres prélèvements FR (taxe d'habitation sur résidence principale — déjà supprimée,
-   à retirer de la liste — régime réel indépendant, etc.)
-2. Mapping produits par catégories (niveaux "familles" suffisants pour déterminer les
-   prélèvements génériques ET catégoriels — pas de granularité produit fine)
-3. Import Open Food Facts (uniquement les champs nécessaires, pas le dump complet)
+1. ✅ Autres prélèvements FR (PFU, CSG retraite) — bien avancé, d'autres prélèvements
+   possibles en continu (chômage, taxe sur salaires...) si besoin identifié
+2. Mapping produits par catégories (niveaux familles)
+3. Import Open Food Facts (champs nécessaires uniquement)
