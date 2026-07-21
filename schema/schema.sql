@@ -75,7 +75,7 @@ CREATE TABLE regle_prelevement (
     date_debut          TEXT NOT NULL,          -- date d'entrée en vigueur (incluse)
     date_fin            TEXT,                   -- date de fin (incluse) ; NULL = toujours en vigueur
     type_regle          TEXT NOT NULL CHECK (type_regle IN
-                            ('taux_fixe', 'montant_fixe', 'bareme_progressif', 'formule', 'montant_par_unite', 'montant_declare')),
+                            ('taux_fixe', 'montant_fixe', 'bareme_progressif', 'formule', 'montant_par_unite', 'montant_declare', 'bareme_a_seuil')),
     taux                REAL,                   -- pour type_regle = 'taux_fixe' (ex : 0.20 pour 20%)
     montant_fixe        REAL,                   -- pour type_regle = 'montant_fixe'
     formule             TEXT,                   -- pour type_regle = 'formule' (interprétée par le moteur applicatif)
@@ -88,6 +88,16 @@ CREATE TABLE regle_prelevement (
     -- document source par l'utilisateur (ex : taxe foncière, taxe d'habitation sur
     -- une résidence secondaire, sur un avis d'imposition). Le calculateur refuse
     -- explicitement de "calculer" ce type — voir fiscal_engine/calculator.py.
+    --
+    -- type_regle = 'bareme_a_seuil' : réutilise la table tranche_bareme, mais avec
+    -- une sémantique DIFFÉRENTE de 'bareme_progressif'. Un barème progressif
+    -- (ex : impôt sur le revenu) applique CHAQUE tranche cumulativement à la part
+    -- de base qui s'y trouve. Un barème À SEUIL sélectionne UNE SEULE tranche (celle
+    -- où tombe une valeur de seuil de référence, ex : le revenu fiscal de référence
+    -- pour la CSG sur pension de retraite) et applique SON taux, en une fois, à la
+    -- base entière (ex : la pension brute) — pas de cumul progressif. C'est un
+    -- mécanisme "tout ou rien par palier", pas un calcul marginal. Voir
+    -- fiscal_engine/calculator.py (fonction _trouver_taux_par_seuil).
     -- assiette : uniquement significatif pour type_regle = 'taux_fixe'.
     --   'base_directe' : le taux s'applique tel quel sur la base fournie
     --                    (ex : cotisation calculée sur un salaire brut).
