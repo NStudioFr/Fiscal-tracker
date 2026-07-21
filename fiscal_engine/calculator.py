@@ -18,8 +18,13 @@ la ligne comme assiette :
   - 'montant_par_unite' : utilise `quantite` (ex : nombre de litres), PAS
     `montant`. Nécessite que l'unité de la ligne (`unite_quantite`) soit
     compatible avec l'unité de la règle (`unite`) — voir units.py.
-  - 'bareme_progressif' : utilise `montant`, découpé en tranches (voir
-    tranche_bareme).
+  - 'bareme_progressif' : utilise `montant`, découpé en tranches CUMULATIVEMENT
+    (voir tranche_bareme) — chaque tranche contribue sa part au résultat.
+  - 'bareme_a_seuil' : sélectionne UNE SEULE tranche selon `valeur_seuil`
+    (qui peut être une grandeur DIFFÉRENTE de `montant` — ex : le revenu
+    fiscal de référence détermine le taux de CSG retraite, mais ce taux
+    s'applique ensuite à la pension brute). Pas de cumul progressif : c'est
+    un mécanisme "tout ou rien par palier".
   - 'montant_declare' : PAS calculable par ce module — le montant est déjà
     connu, lu directement sur le document source (ex : taxe foncière sur un
     avis d'imposition, dont le taux est voté par chaque commune, donc non
@@ -41,7 +46,7 @@ Point d'attention (corrigé suite à revue) : pour les règles de type
 
 import sqlite3
 
-from .exceptions import DonneesBaremeManquantes
+from .exceptions import AucuneTrancheApplicable, DonneesBaremeManquantes
 from .formula import evaluer_formule
 from .parameters import charger_parametres_disponibles
 from .units import convertir_quantite
@@ -55,6 +60,7 @@ def calculer_montant(
     unite_quantite: str = "unite",
     date_reference: str | None = None,
     pays_code: str = "FR",
+    valeur_seuil: float | None = None,
 ) -> dict:
     """Calcule le montant d'un prélèvement pour une règle et une ligne données.
 
@@ -82,6 +88,15 @@ def calculer_montant(
             FormuleInvalide pour variable inconnue).
         pays_code: pays dont les paramètres de référence doivent être
             chargés (défaut 'FR' — ce projet est mono-pays à ce stade).
+        valeur_seuil: pour type_regle = 'bareme_a_seuil' UNIQUEMENT : la
+            valeur utilisée pour déterminer QUELLE tranche s'applique (ex :
+            le revenu fiscal de référence pour la CSG sur pension de
+            retraite). ATTENTION : cette valeur peut être DIFFÉRENTE de
+            `montant` (la base à laquelle le taux trouvé sera appliqué) —
+            ex : le seuil est le RFR, mais le taux trouvé s'applique à la
+            pension brute, pas au RFR lui-même. Si omis, `montant` est
+            utilisé comme valeur de seuil par défaut (cas où seuil et base
+            sont la même grandeur).
 
     Returns:
         Un dict {"montant": float, "base_calcul": float, "taux_applique": float | None}
@@ -128,6 +143,12 @@ def calculer_montant(
     if type_regle == "bareme_progressif":
         montant_calcule, taux_marginal = _calculer_bareme_progressif(conn, regle["id"], montant)
         return {"montant": montant_calcule, "base_calcul": montant, "taux_applique": taux_marginal}
+
+    if type_regle == "bareme_a_seuil":
+        valeur_a_utiliser = valeur_seuil if valeur_seuil is not None else montant
+        taux_trouve = _trouver_taux_par_seuil(conn, regle["id"], valeur_a_utiliser)
+        montant_calcule = montant * taux_trouve
+        return {"montant": montant_calcule, "base_calcul": montant, "taux_applique": taux_trouve}
 
     if type_regle == "montant_declare":
         # Ce type marque un prélèvement dont le montant n'est pas calculable
@@ -185,3 +206,41 @@ def _calculer_bareme_progressif(conn: sqlite3.Connection, regle_id: int, base: f
             taux_marginal = taux
 
     return montant_total, taux_marginal
+
+
+def _trouver_taux_par_seuil(conn: sqlite3.Connection, regle_id: int, valeur_seuil: float) -> float:
+    """Trouve LE taux applicable (une seule tranche, pas de cumul) pour une
+    règle de type 'bareme_a_seuil', selon la tranche où tombe `valeur_seuil`.
+
+    Contrairement à _calculer_bareme_progressif, il n'y a ici AUCUNE somme
+    cumulative : une seule tranche est sélectionnée et son taux est renvoyé
+    tel quel, à appliquer par l'appelant à la base de son choix (qui peut
+    être une grandeur complètement différente de `valeur_seuil` — voir
+    calculer_montant).
+    """
+    tranches = conn.execute(
+        """
+        SELECT borne_min, borne_max, taux
+        FROM tranche_bareme
+        WHERE regle_id = ?
+        ORDER BY borne_min
+        """,
+        (regle_id,),
+    ).fetchall()
+
+    if not tranches:
+        raise DonneesBaremeManquantes(
+            f"La règle id={regle_id} est de type 'bareme_a_seuil' mais n'a "
+            f"aucune tranche associée dans tranche_bareme."
+        )
+
+    for tranche in tranches:
+        borne_min = tranche["borne_min"]
+        borne_max = tranche["borne_max"]  # None = pas de plafond (dernière tranche)
+        if valeur_seuil >= borne_min and (borne_max is None or valeur_seuil <= borne_max):
+            return tranche["taux"]
+
+    raise AucuneTrancheApplicable(
+        f"Aucune tranche de la règle id={regle_id} ne couvre la valeur de seuil {valeur_seuil}. "
+        f"Vérifier la continuité des bornes dans tranche_bareme."
+    )
