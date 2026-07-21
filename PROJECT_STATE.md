@@ -23,6 +23,12 @@
     regex de bloc TVA, fusion de milliers) — confirme la valeur de tester sur du réel
 - [x] Refactor : ingestion/texte_utils.py (normalisation, extraction de nombres,
   nettoyage des symboles monétaires) partagé entre tous les parsers
+- [x] Diagnostic de qualité d'image (ingestion/qualite.py) — 88/88 tests au total
+  - Calibré empiriquement sur les 3 vrais tickets fournis (confiance OCR native de
+    Tesseract plus fiable qu'une métrique de flou classique, testée puis écartée)
+  - extraire_texte_avec_diagnostic() : point d'entrée recommandé pour l'UI, renvoie
+    texte + niveau (bon/moyen/insuffisant) + messages d'avertissement en français
+  - Jamais bloquant : le document reste 'a_valider', l'utilisateur décide
 
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
@@ -73,6 +79,8 @@ d'imposition, facture, ticket de caisse) = les deux piliers du projet sont posé
 - Import Open Food Facts pour enrichir l'identification produit
 
 ## Prochaine étape (ordre convenu)
-3/3 : ticket de caisse — le plus complexe (formats très variables d'une
-enseigne à l'autre) mais le plus important à bien affiner (usage quotidien
-le plus fréquent)
+1. Autres prélèvements FR (taxe d'habitation sur résidence principale — déjà supprimée,
+   à retirer de la liste — régime réel indépendant, etc.)
+2. Mapping produits par catégories (niveaux "familles" suffisants pour déterminer les
+   prélèvements génériques ET catégoriels — pas de granularité produit fine)
+3. Import Open Food Facts (uniquement les champs nécessaires, pas le dump complet)
