@@ -518,5 +518,45 @@ SELECT id, '2026-01-01', NULL, 0.34, 'Art. 102 ter CGI — sources concordantes 
 FROM parametre_reference WHERE code = 'ABATTEMENT_MICRO_BNC';
 
 -- =========================================================================
+-- Prélèvement Forfaitaire Unique (PFU / "flat tax") sur les revenus du
+-- capital — dividendes, intérêts de comptes/livrets non réglementés,
+-- plus-values mobilières, assurance-vie...
+-- =========================================================================
+-- Depuis le 01/01/2026 (LFSS 2026), le taux des prélèvements sociaux sur
+-- les revenus du capital est passé de 17,2% à 18,6% pour la PLUPART des
+-- produits (portant le total PFU à 31,4% au lieu de 30%) — MAIS
+-- l'assurance-vie, le PEL et le CEL (ouverts depuis 2018) ont été
+-- explicitement exclus de cette hausse et restent à 17,2% (total 30%).
+-- Sources concordantes : Ramify, Victoris Avocat, Tantiem, AdvizExperts.
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'PFU_IR', 'Prélèvement forfaitaire unique - part impôt sur le revenu', 'Flat tax - income tax share', 'Tasa única - parte del impuesto sobre la renta',
+       'Montant du revenu de capital perçu (dividendes, intérêts, plus-values...)', 'Art. 200 A du CGI'
+FROM typologie_prelevement WHERE code = 'IMPOT_REVENU';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'PS_CAPITAL_STANDARD', 'Prélèvements sociaux sur revenus du capital (taux standard 2026)', 'Social levies on capital income (2026 standard rate)', 'Gravámenes sociales sobre rentas del capital (tipo estándar 2026)',
+       'Montant du revenu de capital perçu (dividendes, intérêts non réglementés, plus-values mobilières)', 'Art. L136-7 CSS'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'PS_CAPITAL_ASSURANCE_VIE', 'Prélèvements sociaux sur revenus du capital (assurance-vie, PEL/CEL - taux maintenu à 17,2%)', 'Social levies on capital income (life insurance, PEL/CEL - rate held at 17.2%)', 'Gravámenes sociales sobre rentas del capital (seguro de vida - tipo mantenido en 17,2%)',
+       'Produits d''assurance-vie, PEL et CEL ouverts depuis 2018, explicitement exclus de la hausse 2026', 'Art. L136-7 CSS'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2018-01-01', NULL, 'taux_fixe', 0.128, 'base_directe', 'Art. 200 A du CGI, taux inchangé depuis la création du PFU en 2018'
+FROM prelevement WHERE code = 'PFU_IR';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.186, 'base_directe', 'Art. L136-7 CSS — LFSS 2026 (loi n°2025-1403), hausse de 17,2% à 18,6% au 01/01/2026',
+       'Ne s''applique PAS à l''assurance-vie/PEL/CEL, voir PS_CAPITAL_ASSURANCE_VIE'
+FROM prelevement WHERE code = 'PS_CAPITAL_STANDARD';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference, commentaire)
+SELECT id, '2018-01-01', NULL, 'taux_fixe', 0.172, 'base_directe', 'Art. L136-7 CSS — taux maintenu à 17,2% pour ces produits malgré la hausse générale 2026',
+       'S''applique à l''assurance-vie, au PEL et au CEL ouverts depuis 2018'
+FROM prelevement WHERE code = 'PS_CAPITAL_ASSURANCE_VIE';
+
+-- =========================================================================
 -- Fin du contenu fiscal — Lot 3
 -- =========================================================================
