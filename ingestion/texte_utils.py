@@ -17,6 +17,10 @@ REGEX_TOKEN_NUMERIQUE = re.compile(r"^-?\d+[.,]\d+$")
 # Un token "préfixe de milliers" : 1 à 3 chiffres seuls, à fusionner avec le
 # token numérique suivant s'ils sont adjacents (ex : "3" + "733,50").
 REGEX_TOKEN_MILLIERS = re.compile(r"^\d{1,3}$")
+# Le token qui SUIT un préfixe de milliers doit avoir EXACTEMENT 3 chiffres
+# avant son séparateur décimal pour que la fusion soit légitime (vraie
+# notation de milliers) — voir fusionner_prefixes_milliers.
+REGEX_TOKEN_MILLIERS_SUIVANT = re.compile(r"^\d{3}[.,]\d+$")
 # Symboles monétaires à retirer avant tokenisation : qu'ils soient collés à
 # un nombre ("45,20€") ou séparés par un espace ("45,20 €" / "45,20 EUR"),
 # ils ne doivent jamais empêcher la reconnaissance du nombre qui précède.
@@ -55,6 +59,14 @@ def fusionner_prefixes_milliers(tokens: list[str]) -> list[str]:
     suivant s'ils sont adjacents (ex : ['3', '733,50'] -> ['3733,50']),
     pour reconstituer un montant à séparateur de milliers coupé par le
     split() sur les espaces.
+
+    Condition stricte : la fusion n'a lieu que si le token suivant a
+    EXACTEMENT 3 chiffres avant son séparateur décimal (vraie notation de
+    milliers, ex : "733,50"). Sans cette contrainte, un chiffre parasite
+    isolé produit par l'OCR (ex : un symbole mal reconnu) peut être fusionné
+    à tort avec un montant sans rapport — bug détecté en testant sur un vrai
+    ticket de caisse : un "9" parasite fusionné avec "0,39" donnait "90,39"
+    au lieu du montant réel 0,39.
     """
     fusionnes: list[str] = []
     i = 0
@@ -62,7 +74,7 @@ def fusionner_prefixes_milliers(tokens: list[str]) -> list[str]:
         if (
             i + 1 < len(tokens)
             and REGEX_TOKEN_MILLIERS.fullmatch(tokens[i])
-            and REGEX_TOKEN_NUMERIQUE.fullmatch(tokens[i + 1])
+            and REGEX_TOKEN_MILLIERS_SUIVANT.match(tokens[i + 1])
         ):
             fusionnes.append(tokens[i] + tokens[i + 1])
             i += 2
