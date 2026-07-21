@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fiscal_engine import db, resolver, calculator, orchestrator, aggregator, formula, units, parameters, foyer, independant
+from fiscal_engine import db, resolver, calculator, orchestrator, aggregator, formula, units, parameters, foyer, independant, retraite
 from fiscal_engine.exceptions import (
     AucuneRegleApplicable,
     ReglesChevauchantes,
@@ -19,6 +19,7 @@ from fiscal_engine.exceptions import (
     DonneesBaremeManquantes,
     UniteIncompatible,
     AucuneValeurParametreApplicable,
+    AucuneTrancheApplicable,
 )
 
 CHEMIN_SCHEMA = Path(__file__).resolve().parent.parent / "schema" / "schema.sql"
@@ -241,6 +242,87 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
             (pid, valeur),
         )
 
+    # Prélèvement de test en mode 'bareme_a_seuil' (type CSG retraite : le
+    # taux est sélectionné par une valeur de seuil, ex un RFR, DIFFÉRENTE de
+    # la base à laquelle le taux s'applique ensuite, ex une pension).
+    conn.execute(
+        """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
+           VALUES ('FR', ?, 'SEUIL_TEST', 'Prelevement a seuil de test', 'Test - bareme a seuil')""",
+        (id_typo_ir,),
+    )
+    id_prelevement_seuil = conn.execute(
+        "SELECT id FROM prelevement WHERE code = 'SEUIL_TEST'"
+    ).fetchone()["id"]
+    conn.execute(
+        """INSERT INTO regle_prelevement
+           (prelevement_id, date_debut, date_fin, type_regle, source_reference)
+           VALUES (?, '2026-01-01', NULL, 'bareme_a_seuil', 'Test - bareme a seuil')""",
+        (id_prelevement_seuil,),
+    )
+    id_regle_seuil = conn.execute(
+        "SELECT id FROM regle_prelevement WHERE prelevement_id = ?", (id_prelevement_seuil,)
+    ).fetchone()["id"]
+    conn.execute(
+        "INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux) VALUES (?, 0, 1000, 0.0)",
+        (id_regle_seuil,),
+    )
+    conn.execute(
+        "INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux) VALUES (?, 1000, 2000, 0.05)",
+        (id_regle_seuil,),
+    )
+    conn.execute(
+        "INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux) VALUES (?, 2000, NULL, 0.10)",
+        (id_regle_seuil,),
+    )
+
+    # Prélèvements de test pour fiscal_engine.retraite (valeurs rondes de
+    # test, PAS les vrais seuils 2026 — voir seed_data pour les vraies valeurs).
+    conn.execute(
+        """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
+           VALUES ('FR', ?, 'CSG_RETRAITE_1PART', 'CSG retraite test 1 part', 'Test')""",
+        (id_typo_ir,),
+    )
+    id_csg_retraite_1part = conn.execute(
+        "SELECT id FROM prelevement WHERE code = 'CSG_RETRAITE_1PART'"
+    ).fetchone()["id"]
+    conn.execute(
+        """INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, source_reference)
+           VALUES (?, '2026-01-01', NULL, 'bareme_a_seuil', 'Test')""",
+        (id_csg_retraite_1part,),
+    )
+    id_regle_csg_retraite = conn.execute(
+        "SELECT id FROM regle_prelevement WHERE prelevement_id = ?", (id_csg_retraite_1part,)
+    ).fetchone()["id"]
+    for borne_min, borne_max, taux in [(0, 1000, 0.0), (1000, 2000, 0.038), (2000, 3000, 0.066), (3000, None, 0.083)]:
+        conn.execute(
+            "INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux) VALUES (?, ?, ?, ?)",
+            (id_regle_csg_retraite, borne_min, borne_max, taux),
+        )
+
+    conn.execute(
+        """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
+           VALUES ('FR', ?, 'CRDS_RETRAITE', 'CRDS retraite test', 'Test')""",
+        (id_typo_ir,),
+    )
+    id_crds_retraite = conn.execute("SELECT id FROM prelevement WHERE code = 'CRDS_RETRAITE'").fetchone()["id"]
+    conn.execute(
+        """INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+           VALUES (?, '2026-01-01', NULL, 'taux_fixe', 0.005, 'base_directe', 'Test')""",
+        (id_crds_retraite,),
+    )
+
+    conn.execute(
+        """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
+           VALUES ('FR', ?, 'CASA_RETRAITE', 'CASA retraite test', 'Test')""",
+        (id_typo_ir,),
+    )
+    id_casa_retraite = conn.execute("SELECT id FROM prelevement WHERE code = 'CASA_RETRAITE'").fetchone()["id"]
+    conn.execute(
+        """INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+           VALUES (?, '2026-01-01', NULL, 'taux_fixe', 0.003, 'base_directe', 'Test')""",
+        (id_casa_retraite,),
+    )
+
     conn.execute(
         """INSERT INTO categorie_produit (code, libelle_fr, type_depense_id)
            VALUES ('EPICERIE_SALEE', 'Épicerie salée', ?)""",
@@ -262,6 +344,7 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
         "id_prelevement_ticpe": id_prelevement_ticpe,
         "id_prelevement_plafonnee": id_prelevement_plafonnee,
         "id_prelevement_declaree": id_prelevement_declaree,
+        "id_prelevement_seuil": id_prelevement_seuil,
         "id_categorie": id_categorie,
     }
 
@@ -627,6 +710,97 @@ class TestIndependant(unittest.TestCase):
     def test_revenu_imposable_bnc(self):
         revenu = independant.calculer_revenu_imposable_micro(self.conn, "bnc", 10000.0, "2026-06-01")
         self.assertAlmostEqual(revenu, 7000.0)  # 10000 * (1 - 0.30)
+
+
+class TestBaremeASeuil(unittest.TestCase):
+    def setUp(self):
+        self.conn = _creer_bdd_test()
+        self.ids = _inserer_donnees_de_base(self.conn)
+
+    def test_selectionne_la_bonne_tranche_premiere(self):
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_seuil"], "2026-06-01")
+        # valeur_seuil=500 -> tranche [0,1000] taux 0.0
+        resultat = calculator.calculer_montant(self.conn, regle, montant=5000.0, valeur_seuil=500.0)
+        self.assertAlmostEqual(resultat["taux_applique"], 0.0)
+        self.assertAlmostEqual(resultat["montant"], 0.0)  # 5000 * 0.0
+
+    def test_selectionne_la_bonne_tranche_intermediaire(self):
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_seuil"], "2026-06-01")
+        # valeur_seuil=1500 -> tranche [1000,2000] taux 0.05
+        resultat = calculator.calculer_montant(self.conn, regle, montant=5000.0, valeur_seuil=1500.0)
+        self.assertAlmostEqual(resultat["taux_applique"], 0.05)
+        self.assertAlmostEqual(resultat["montant"], 250.0)  # 5000 * 0.05
+
+    def test_selectionne_la_derniere_tranche_sans_plafond(self):
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_seuil"], "2026-06-01")
+        # valeur_seuil=100000 -> derniere tranche [2000, None] taux 0.10
+        resultat = calculator.calculer_montant(self.conn, regle, montant=5000.0, valeur_seuil=100000.0)
+        self.assertAlmostEqual(resultat["taux_applique"], 0.10)
+        self.assertAlmostEqual(resultat["montant"], 500.0)  # 5000 * 0.10
+
+    def test_seuil_different_de_la_base(self):
+        # Cas d'usage central : le seuil (ex RFR) determine le taux, mais ce
+        # taux s'applique a une base DIFFERENTE (ex pension brute).
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_seuil"], "2026-06-01")
+        resultat = calculator.calculer_montant(self.conn, regle, montant=2000.0, valeur_seuil=1500.0)
+        # Taux de la tranche ou tombe 1500 (0.05), applique a la base 2000 (pas 1500)
+        self.assertAlmostEqual(resultat["taux_applique"], 0.05)
+        self.assertAlmostEqual(resultat["montant"], 100.0)  # 2000 * 0.05, PAS 1500 * 0.05
+
+    def test_seuil_par_defaut_egal_au_montant_si_non_fourni(self):
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_seuil"], "2026-06-01")
+        resultat = calculator.calculer_montant(self.conn, regle, montant=1500.0)  # pas de valeur_seuil
+        self.assertAlmostEqual(resultat["taux_applique"], 0.05)  # 1500 utilise comme seuil ET comme base
+
+    def test_valeur_hors_de_toute_tranche_leve_exception(self):
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_seuil"], "2026-06-01")
+        with self.assertRaises(AucuneTrancheApplicable):
+            calculator.calculer_montant(self.conn, regle, montant=1000.0, valeur_seuil=-50.0)
+
+
+class TestRetraite(unittest.TestCase):
+    def setUp(self):
+        self.conn = _creer_bdd_test()
+        self.ids = _inserer_donnees_de_base(self.conn)
+
+    def test_taux_exonere_aucun_prelevement(self):
+        r = retraite.calculer_prelevements_retraite(
+            self.conn, nombre_parts=1, revenu_fiscal_reference=500.0, pension_brute=1500.0, date_reference="2026-06-01"
+        )
+        self.assertAlmostEqual(r["taux_csg"], 0.0)
+        self.assertAlmostEqual(r["montant_crds"], 0.0)
+        self.assertAlmostEqual(r["montant_casa"], 0.0)
+        self.assertAlmostEqual(r["pension_nette"], 1500.0)
+
+    def test_taux_reduit_crds_due_casa_exoneree(self):
+        r = retraite.calculer_prelevements_retraite(
+            self.conn, nombre_parts=1, revenu_fiscal_reference=1500.0, pension_brute=1000.0, date_reference="2026-06-01"
+        )
+        self.assertAlmostEqual(r["taux_csg"], 0.038)
+        self.assertAlmostEqual(r["montant_crds"], 5.0)  # 1000 * 0.005
+        self.assertAlmostEqual(r["montant_casa"], 0.0)  # PAS due au taux reduit
+
+    def test_taux_median_crds_et_casa_dues(self):
+        r = retraite.calculer_prelevements_retraite(
+            self.conn, nombre_parts=1, revenu_fiscal_reference=2500.0, pension_brute=1000.0, date_reference="2026-06-01"
+        )
+        self.assertAlmostEqual(r["taux_csg"], 0.066)
+        self.assertAlmostEqual(r["montant_crds"], 5.0)
+        self.assertAlmostEqual(r["montant_casa"], 3.0)  # 1000 * 0.003
+
+    def test_taux_normal_crds_et_casa_dues(self):
+        r = retraite.calculer_prelevements_retraite(
+            self.conn, nombre_parts=1, revenu_fiscal_reference=5000.0, pension_brute=1000.0, date_reference="2026-06-01"
+        )
+        self.assertAlmostEqual(r["taux_csg"], 0.083)
+        self.assertAlmostEqual(r["montant_casa"], 3.0)
+        self.assertAlmostEqual(r["total_preleve"], 83.0 + 5.0 + 3.0)
+
+    def test_nombre_parts_non_gere_leve_exception(self):
+        with self.assertRaises(ValueError):
+            retraite.calculer_prelevements_retraite(
+                self.conn, nombre_parts=3, revenu_fiscal_reference=5000.0, pension_brute=1000.0, date_reference="2026-06-01"
+            )
 
 
 class TestMontantDeclare(unittest.TestCase):
