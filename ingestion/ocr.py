@@ -4,40 +4,92 @@ Tesseract est utilisé en local via pytesseract — aucun appel réseau, aucune
 dépendance à un service cloud (Google Vision, AWS Textract, etc.), conforme
 à l'objectif de confidentialité du projet posé dès le départ.
 
-Un prétraitement d'image minimal (niveaux de gris + amélioration du
-contraste) est appliqué avant l'OCR : Tesseract est nettement plus fiable
-sur une image nette en noir et blanc que sur une photo brute (ombres,
-légère inclinaison, arrière-plan coloré d'un ticket de caisse...).
+PRÉTRAITEMENT : la qualité du prétraitement d'image a un impact considérable
+sur la fiabilité de l'OCR — constaté empiriquement sur de vrais tickets de
+caisse fournis pendant le développement (voir tests/fixtures/tickets_reels/).
+Un simple passage en niveaux de gris + contraste (v1 de ce module) donnait
+des résultats significativement dégradés sur une photo de ticket avec
+ombres/plis par rapport à un pipeline plus complet :
+  1. Niveaux de gris
+  2. Redimensionnement (upscale x1.5) — améliore la résolution effective du
+     texte, utile sur les photos de petite taille ou les petits caractères
+     de ticket de caisse.
+  3. Débruitage (fastNlMeansDenoising) — réduit le grain/bruit de capteur
+     photo qui perturbe la reconnaissance de caractères fins.
+  4. PAS de binarisation/seuillage. Deux approches ont été testées (seuil
+     adaptatif, puis seuil global d'Otsu) et toutes deux se sont révélées
+     CONTRE-PRODUCTIVES sur certains documents : elles introduisaient des
+     confusions de chiffres (ex : '0' lu comme '8') qui n'apparaissaient PAS
+     sans binarisation. Le simple niveaux de gris + débruitage s'est avéré
+     le meilleur compromis sur l'ensemble des documents testés (synthétiques
+     ET vraie photo de ticket bruitée) — la binarisation n'a donc pas été
+     retenue dans la version finale de ce pipeline.
+
+Ce pipeline utilise OpenCV (cv2) plutôt que PIL seul pour ces étapes, OpenCV
+étant nettement mieux outillé pour ce type de traitement d'image. Un
+fallback vers un prétraitement PIL plus simple est prévu si OpenCV n'est pas
+installé sur la machine (fonctionnalité dégradée mais pas d'erreur bloquante).
 
 LIMITES ASSUMÉES :
-  - Le prétraitement ici est volontairement simple (pas de correction de
-    perspective/rotation, pas de suppression de bruit avancée). Une photo
-    prise de travers ou floue dégradera la qualité de reconnaissance —
-    c'est pourquoi chaque document importé reste 'a_valider' par défaut
-    (voir schema.sql), jamais automatiquement approuvé.
-  - La langue par défaut est le français ('fra'). D'autres langues peuvent
-    être passées explicitement (ex : 'eng', 'spa') si le pack correspondant
-    est installé sur la machine.
+  - Pas de correction de perspective/rotation (photo prise de travers) —
+    Tesseract reste sensible à une inclinaison prononcée.
+  - Les paramètres de seuillage (taille de bloc, constante C) sont des
+    valeurs par défaut raisonnables, pas calibrées automatiquement par image
+    — une image très atypique peut nécessiter un réglage différent.
+  - La langue par défaut est le français ('fra'). Le pack de langue
+    correspondant doit être installé sur la machine.
+  - Quelle que soit la qualité du prétraitement, l'OCR reste probabiliste :
+    chaque document importé reste 'a_valider' par défaut (schema.sql).
 """
 
 from pathlib import Path
 
+import numpy as np
 import pytesseract
 from PIL import Image, ImageOps
 
 LANGUE_PAR_DEFAUT = "fra"
+_SEUIL_PETITE_RESOLUTION = 400  # pixels ; en-dessous, un upscale aide l'OCR
+
+try:
+    import cv2
+
+    _CV2_DISPONIBLE = True
+except ImportError:
+    _CV2_DISPONIBLE = False
 
 
-def _pretraiter_image(image: Image.Image) -> Image.Image:
-    """Convertit en niveaux de gris et étire le contraste — améliore
-    sensiblement la reconnaissance sur des photos de tickets/documents pris
-    dans des conditions d'éclairage variables.
+def _pretraiter_avec_cv2(chemin_image: str | Path) -> Image.Image:
+    image_cv = cv2.imread(str(chemin_image))
+    gris = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+
+    # Le redimensionnement (upscale) n'aide QUE les images de petite
+    # résolution (ex : 300x497px) — appliqué systématiquement, il dégrade
+    # au contraire l'analyse de mise en page de Tesseract sur des images
+    # déjà bien dimensionnées (régression détectée en testant : une image
+    # nette de 900x650px voyait ses colonnes libellé/montant scindées à
+    # tort après upscale). Seuil : on ne redimensionne que si la plus
+    # petite dimension est sous SEUIL_PETITE_RESOLUTION.
+    hauteur, largeur = gris.shape
+    if min(hauteur, largeur) < _SEUIL_PETITE_RESOLUTION:
+        gris = cv2.resize(gris, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
+
+    debruite = cv2.fastNlMeansDenoising(gris, h=10)
+    return Image.fromarray(debruite)
+
+
+def _pretraiter_avec_pil(chemin_image: str | Path) -> Image.Image:
+    """Repli utilisé si OpenCV n'est pas installé — moins performant sur
+    des photos difficiles (ombres, plis), mais fonctionnel.
     """
-    image_grise = image.convert("L")
-    return ImageOps.autocontrast(image_grise)
+    with Image.open(chemin_image) as image:
+        image_grise = image.convert("L")
+        return ImageOps.autocontrast(image_grise)
 
 
-def extraire_texte_image(chemin_image: str | Path, langue: str = LANGUE_PAR_DEFAUT) -> str:
+def extraire_texte_image(
+    chemin_image: str | Path, langue: str = LANGUE_PAR_DEFAUT, psm: int = 4
+) -> str:
     """Extrait le texte brut d'une image via Tesseract OCR.
 
     Args:
@@ -45,12 +97,15 @@ def extraire_texte_image(chemin_image: str | Path, langue: str = LANGUE_PAR_DEFA
         langue: code langue Tesseract (défaut : 'fra'). Le pack de langue
             correspondant doit être installé sur la machine
             (ex : `apt install tesseract-ocr-fra` sous Ubuntu/Debian).
+        psm: mode de segmentation de page Tesseract ("Page Segmentation
+            Mode"). 4 (défaut) suppose une colonne de texte de tailles
+            variables — plus adapté aux tickets de caisse et factures qu'au
+            mode par défaut de Tesseract (conçu pour une page de texte
+            homogène). Voir `tesseract --help-psm` pour les autres valeurs.
 
     Returns:
         Le texte brut reconnu, tel quel (aucune interprétation structurelle
-        — c'est le rôle des modules de parsing dans ingestion/*_parser.py
-        ou ingestion/fiche_paie.py etc.).
+        — c'est le rôle des modules de parsing dans ingestion/*.py).
     """
-    with Image.open(chemin_image) as image:
-        image_pretraitee = _pretraiter_image(image)
-        return pytesseract.image_to_string(image_pretraitee, lang=langue)
+    image_pretraitee = _pretraiter_avec_cv2(chemin_image) if _CV2_DISPONIBLE else _pretraiter_avec_pil(chemin_image)
+    return pytesseract.image_to_string(image_pretraitee, lang=langue, config=f"--psm {psm}")
