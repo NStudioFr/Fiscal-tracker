@@ -558,5 +558,95 @@ SELECT id, '2018-01-01', NULL, 'taux_fixe', 0.172, 'base_directe', 'Art. L136-7 
 FROM prelevement WHERE code = 'PS_CAPITAL_ASSURANCE_VIE';
 
 -- =========================================================================
+-- CSG / CRDS / CASA sur pensions de retraite
+-- =========================================================================
+-- Premier usage réel du mécanisme 'bareme_a_seuil' (voir schema.sql) : le
+-- taux de CSG applicable dépend du REVENU FISCAL DE RÉFÉRENCE (RFR) du
+-- foyer, mais s'applique ensuite à la PENSION BRUTE — deux grandeurs
+-- différentes, d'où le paramètre valeur_seuil distinct de montant dans
+-- calculer_montant().
+--
+-- AVERTISSEMENT DE SOURCING (à prendre au sérieux) : les seuils RFR exacts
+-- pour 2026 varient sensiblement selon les sources spécialisées consultées
+-- (deux groupes de sources donnent des seuils différents de plusieurs
+-- centaines d'euros). Les valeurs retenues ci-dessous s'appuient sur le
+-- groupe de sources le plus large et le plus cohérent entre elles trouvé
+-- (5 sources indépendantes convergentes à quelques euros près, cohérentes
+-- avec la revalorisation +1,8% annoncée pour 2026), mais restent une
+-- ESTIMATION, pas une valeur officielle vérifiée sur le texte réglementaire
+-- lui-même (BOFiP / décret). L'utilisateur doit vérifier ces seuils sur son
+-- avis d'imposition ou via le simulateur officiel avant toute décision
+-- s'appuyant dessus.
+--
+-- PÉRIMÈTRE : seuls 1 part et 2 parts sont modélisés (les foyers avec
+-- d'autres nombres de parts, ex 1,5 ou 2,5, ne sont pas couverts — les
+-- seuils intermédiaires ne suivent pas une simple règle proportionnelle
+-- vérifiable facilement).
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'CSG_RETRAITE_1PART', 'CSG sur pension de retraite (foyer à 1 part)', 'CSG on retirement pension (1 tax share household)', 'CSG sobre pensión de jubilación (hogar de 1 parte)',
+       'Taux sélectionné selon le RFR du foyer, appliqué à la pension brute', 'Art. L136-8 CSS — seuils estimés, à vérifier sur l''avis d''imposition'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'CSG_RETRAITE_2PARTS', 'CSG sur pension de retraite (foyer à 2 parts)', 'CSG on retirement pension (2 tax shares household)', 'CSG sobre pensión de jubilación (hogar de 2 partes)',
+       'Taux sélectionné selon le RFR du foyer, appliqué à la pension brute', 'Art. L136-8 CSS — seuils estimés, à vérifier sur l''avis d''imposition'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'bareme_a_seuil',
+       'Art. L136-8 CSS — seuils 2026 estimés (consensus de 5 sources : signal-alpha.fr, mabonneretraite.fr, quelles-aides.fr, la-juvenie.fr, cesdefrance.fr), +1,8% de revalorisation 2026',
+       'Seuils RFR 2024 (avis d''imposition 2025), pour une pension versée en 2026, foyer à 1 part'
+FROM prelevement WHERE code = 'CSG_RETRAITE_1PART';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'bareme_a_seuil',
+       'Art. L136-8 CSS — seuils 2026 estimés (consensus de 5 sources : signal-alpha.fr, mabonneretraite.fr, quelles-aides.fr, la-juvenie.fr, cesdefrance.fr), +1,8% de revalorisation 2026',
+       'Seuils RFR 2024 (avis d''imposition 2025), pour une pension versée en 2026, foyer à 2 parts'
+FROM prelevement WHERE code = 'CSG_RETRAITE_2PARTS';
+
+-- Tranches 1 part : exonération / réduit 3,8% / médian 6,6% / normal 8,3%
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
+SELECT rp.id, 0, 13048, 0.000 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_1PART';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
+SELECT rp.id, 13048, 17057, 0.038 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_1PART';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
+SELECT rp.id, 17057, 26472, 0.066 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_1PART';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
+SELECT rp.id, 26472, NULL, 0.083 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_1PART';
+
+-- Tranches 2 parts
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
+SELECT rp.id, 0, 20016, 0.000 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
+SELECT rp.id, 20016, 26167, 0.038 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
+SELECT rp.id, 26167, 39886, 0.066 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
+SELECT rp.id, 39886, NULL, 0.083 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
+
+-- CRDS retraite : 0,5%, due dès que le taux de CSG > 0% (donc pas en cas
+-- d'exonération). CASA retraite : 0,3%, due uniquement aux taux médian et
+-- normal. La logique de conditionnement (quand appliquer chacune) est gérée
+-- par fiscal_engine/retraite.py, pas directement par ces deux règles qui
+-- ne sont que des taux fixes simples.
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'CRDS_RETRAITE', 'CRDS sur pension de retraite', 'CRDS on retirement pension', 'CRDS sobre pensión de jubilación',
+       'Pension brute, uniquement si non exonéré de CSG', 'Ordonnance n°96-50 du 24/01/1996'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'CASA_RETRAITE', 'CASA sur pension de retraite', 'CASA on retirement pension', 'CASA sobre pensión de jubilación',
+       'Pension brute, uniquement aux taux de CSG médian (6,6%) et normal (8,3%)', 'Art. L14-10-4 CASF'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2013-04-01', NULL, 'taux_fixe', 0.005, 'base_directe', 'Ordonnance n°96-50 du 24/01/1996, taux inchangé'
+FROM prelevement WHERE code = 'CRDS_RETRAITE';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2013-04-01', NULL, 'taux_fixe', 0.003, 'base_directe', 'Art. L14-10-4 CASF, taux inchangé depuis 2013'
+FROM prelevement WHERE code = 'CASA_RETRAITE';
+
+-- =========================================================================
 -- Fin du contenu fiscal — Lot 3
 -- =========================================================================
