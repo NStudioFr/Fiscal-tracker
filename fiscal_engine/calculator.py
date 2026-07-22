@@ -25,6 +25,12 @@ la ligne comme assiette :
     fiscal de référence détermine le taux de CSG retraite, mais ce taux
     s'applique ensuite à la pension brute). Pas de cumul progressif : c'est
     un mécanisme "tout ou rien par palier".
+  - 'montant_par_unite_a_seuil' : combine 'bareme_a_seuil' et
+    'montant_par_unite'. Sélectionne une tranche selon `valeur_seuil`, mais
+    cette tranche fournit un MONTANT PAR UNITÉ (pas un taux), ensuite
+    multiplié par `quantite` (convertie dans l'unité de la règle). Ex : la
+    contribution sur les boissons sucrées, où le tarif en €/hL dépend de la
+    teneur en sucre en kg/hL (le seuil) — appliqué ensuite au volume acheté.
   - 'montant_declare' : PAS calculable par ce module — le montant est déjà
     connu, lu directement sur le document source (ex : taxe foncière sur un
     avis d'imposition, dont le taux est voté par chaque commune, donc non
@@ -150,6 +156,17 @@ def calculer_montant(
         montant_calcule = montant * taux_trouve
         return {"montant": montant_calcule, "base_calcul": montant, "taux_applique": taux_trouve}
 
+    if type_regle == "montant_par_unite_a_seuil":
+        if valeur_seuil is None:
+            raise ValueError(
+                "Le paramètre valeur_seuil est obligatoire pour une règle de type "
+                "'montant_par_unite_a_seuil' (ex : teneur en sucre par hectolitre)."
+            )
+        montant_unitaire_trouve = _trouver_montant_unitaire_par_seuil(conn, regle["id"], valeur_seuil)
+        quantite_convertie = convertir_quantite(quantite, unite_quantite, regle["unite"])
+        montant_calcule = quantite_convertie * montant_unitaire_trouve
+        return {"montant": montant_calcule, "base_calcul": quantite_convertie, "taux_applique": montant_unitaire_trouve}
+
     if type_regle == "montant_declare":
         # Ce type marque un prélèvement dont le montant n'est pas calculable
         # (pas de taux national) et doit être lu directement sur le document
@@ -239,6 +256,40 @@ def _trouver_taux_par_seuil(conn: sqlite3.Connection, regle_id: int, valeur_seui
         borne_max = tranche["borne_max"]  # None = pas de plafond (dernière tranche)
         if valeur_seuil >= borne_min and (borne_max is None or valeur_seuil <= borne_max):
             return tranche["taux"]
+
+    raise AucuneTrancheApplicable(
+        f"Aucune tranche de la règle id={regle_id} ne couvre la valeur de seuil {valeur_seuil}. "
+        f"Vérifier la continuité des bornes dans tranche_bareme."
+    )
+
+
+def _trouver_montant_unitaire_par_seuil(conn: sqlite3.Connection, regle_id: int, valeur_seuil: float) -> float:
+    """Équivalent de _trouver_taux_par_seuil, mais renvoie un montant par
+    unité (tranche_bareme.montant_unitaire) plutôt qu'un taux — pour les
+    règles de type 'montant_par_unite_a_seuil' (ex : contribution sur les
+    boissons sucrées, tarif en €/hL déterminé par la teneur en sucre).
+    """
+    tranches = conn.execute(
+        """
+        SELECT borne_min, borne_max, montant_unitaire
+        FROM tranche_bareme
+        WHERE regle_id = ?
+        ORDER BY borne_min
+        """,
+        (regle_id,),
+    ).fetchall()
+
+    if not tranches:
+        raise DonneesBaremeManquantes(
+            f"La règle id={regle_id} est de type 'montant_par_unite_a_seuil' mais n'a "
+            f"aucune tranche associée dans tranche_bareme."
+        )
+
+    for tranche in tranches:
+        borne_min = tranche["borne_min"]
+        borne_max = tranche["borne_max"]
+        if valeur_seuil >= borne_min and (borne_max is None or valeur_seuil <= borne_max):
+            return tranche["montant_unitaire"]
 
     raise AucuneTrancheApplicable(
         f"Aucune tranche de la règle id={regle_id} ne couvre la valeur de seuil {valeur_seuil}. "
