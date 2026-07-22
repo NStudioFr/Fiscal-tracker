@@ -323,6 +323,30 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
         (id_casa_retraite,),
     )
 
+    # Prélèvement de test en mode 'montant_par_unite_a_seuil' (type taxe
+    # soda : tarif €/hL déterminé par une teneur en sucre, kg/hL).
+    conn.execute(
+        """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
+           VALUES ('FR', ?, 'TAXE_SODA_TEST', 'Taxe soda de test', 'Test')""",
+        (id_typo_ir,),
+    )
+    id_prelevement_soda = conn.execute(
+        "SELECT id FROM prelevement WHERE code = 'TAXE_SODA_TEST'"
+    ).fetchone()["id"]
+    conn.execute(
+        """INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, unite, source_reference)
+           VALUES (?, '2026-01-01', NULL, 'montant_par_unite_a_seuil', 'hL', 'Test')""",
+        (id_prelevement_soda,),
+    )
+    id_regle_soda = conn.execute(
+        "SELECT id FROM regle_prelevement WHERE prelevement_id = ?", (id_prelevement_soda,)
+    ).fetchone()["id"]
+    for borne_min, borne_max, montant_unitaire in [(0, 5, 4.07), (5, 8, 21.38), (8, None, 35.63)]:
+        conn.execute(
+            "INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire) VALUES (?, ?, ?, ?)",
+            (id_regle_soda, borne_min, borne_max, montant_unitaire),
+        )
+
     conn.execute(
         """INSERT INTO categorie_produit (code, libelle_fr, type_depense_id)
            VALUES ('EPICERIE_SALEE', 'Épicerie salée', ?)""",
@@ -345,6 +369,7 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
         "id_prelevement_plafonnee": id_prelevement_plafonnee,
         "id_prelevement_declaree": id_prelevement_declaree,
         "id_prelevement_seuil": id_prelevement_seuil,
+        "id_prelevement_soda": id_prelevement_soda,
         "id_categorie": id_categorie,
     }
 
@@ -801,6 +826,49 @@ class TestRetraite(unittest.TestCase):
             retraite.calculer_prelevements_retraite(
                 self.conn, nombre_parts=3, revenu_fiscal_reference=5000.0, pension_brute=1000.0, date_reference="2026-06-01"
             )
+
+
+class TestMontantParUniteASeuil(unittest.TestCase):
+    def setUp(self):
+        self.conn = _creer_bdd_test()
+        self.ids = _inserer_donnees_de_base(self.conn)
+
+    def test_tranche_basse(self):
+        # 3 kg/hL de sucre -> tarif 4.07 EUR/hL, applique a 1.5 hL (150L)
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_soda"], "2026-06-01")
+        resultat = calculator.calculer_montant(
+            self.conn, regle, montant=200.0, quantite=1.5, unite_quantite="hL", valeur_seuil=3.0
+        )
+        self.assertAlmostEqual(resultat["taux_applique"], 4.07)
+        self.assertAlmostEqual(resultat["montant"], 1.5 * 4.07)
+
+    def test_tranche_intermediaire(self):
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_soda"], "2026-06-01")
+        resultat = calculator.calculer_montant(
+            self.conn, regle, montant=200.0, quantite=1.0, unite_quantite="hL", valeur_seuil=6.5
+        )
+        self.assertAlmostEqual(resultat["taux_applique"], 21.38)
+
+    def test_tranche_haute(self):
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_soda"], "2026-06-01")
+        resultat = calculator.calculer_montant(
+            self.conn, regle, montant=200.0, quantite=1.0, unite_quantite="hL", valeur_seuil=10.0
+        )
+        self.assertAlmostEqual(resultat["taux_applique"], 35.63)
+
+    def test_conversion_unite_litre_vers_hectolitre(self):
+        # Une ligne exprimee en litres (100L = 1hL) doit etre convertie automatiquement.
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_soda"], "2026-06-01")
+        resultat = calculator.calculer_montant(
+            self.conn, regle, montant=200.0, quantite=100.0, unite_quantite="L", valeur_seuil=3.0
+        )
+        self.assertAlmostEqual(resultat["base_calcul"], 1.0)  # converti en hL
+        self.assertAlmostEqual(resultat["montant"], 4.07)
+
+    def test_valeur_seuil_obligatoire(self):
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_soda"], "2026-06-01")
+        with self.assertRaises(ValueError):
+            calculator.calculer_montant(self.conn, regle, montant=200.0, quantite=1.0, unite_quantite="hL")
 
 
 class TestMontantDeclare(unittest.TestCase):
