@@ -35,7 +35,15 @@
   - ATTENTION : seuils RFR 2026 estimés par recoupement de sources (non vérifiés sur
     texte réglementaire officiel) — à vérifier par l'utilisateur sur son avis d'imposition
   - Limites : foyers 1 ou 2 parts seulement ; pas de mécanisme de lissage
-
+- [x] Mapping produits par catégories : 32 familles créées, toutes mappées à un
+  taux de TVA (fr_categories_produits.sql, à charger après fr_seed_lot3.sql)
+- [x] Nouveau mécanisme bareme_a_seuil (Point 3 CSG retraite précédent) 
+- [x] Nouveau mécanisme montant_par_unite_a_seuil + taxe soda officielle — 104/104 tests
+  - Sourcé EXCLUSIVEMENT sur BOFiP BOI-BAREME-000038 (24/12/2025), art. 1613 ter/quater CGI
+  - Barème sucre : <5kg/hL→4,07€ / 5-8→21,38€ / >8→35,63€ ; barème édulcorant : ≤120mg/L→4,50€ / >120→6€
+  - PAS ENCORE reliée à BOISSONS_SUCREES (nécessite teneur en sucre par produit,
+    pas par famille) — en attente de l'import OFF pour le rattachement complet
+    
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
 - Quotient familial, décote, plafonnement IR non gérés
@@ -85,7 +93,5 @@ d'imposition, facture, ticket de caisse) = les deux piliers du projet sont posé
 - Import Open Food Facts pour enrichir l'identification produit
 
 ## Prochaine étape (ordre convenu)
-1. ✅ Autres prélèvements FR (PFU, CSG retraite) — bien avancé, d'autres prélèvements
-   possibles en continu (chômage, taxe sur salaires...) si besoin identifié
-2. Mapping produits par catégories (niveaux familles)
-3. Import Open Food Facts (champs nécessaires uniquement)
+Point 3 : import Open Food Facts (champs nécessaires uniquement) — permettra
+notamment de finaliser le rattachement de la taxe soda par produit réel
