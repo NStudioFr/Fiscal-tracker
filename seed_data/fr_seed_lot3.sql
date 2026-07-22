@@ -648,5 +648,77 @@ SELECT id, '2013-04-01', NULL, 'taux_fixe', 0.003, 'base_directe', 'Art. L14-10-
 FROM prelevement WHERE code = 'CASA_RETRAITE';
 
 -- =========================================================================
+-- Contributions sur les boissons non alcooliques (sucres ajoutés et
+-- édulcorants de synthèse) — dites "taxe soda"
+-- =========================================================================
+-- Source EXCLUSIVEMENT officielle : BOFiP BOI-BAREME-000038 du 24/12/2025
+-- (https://bofip.impots.gouv.fr/bofip/11575-PGP.html/identifiant=BOI-BAREME-000038-20251224),
+-- qui cite lui-même l'art. 1613 ter et 1613 quater du CGI, modifiés par la
+-- loi n°2025-199 du 28/02/2025 de financement de la sécurité sociale pour
+-- 2025 (art. 31, I-2°). Ces deux articles sont mentionnés dans
+-- l'affichage "reference_legale" ci-dessous. Barème vérifié directement
+-- sur le texte administratif officiel, contrairement à d'autres sources
+-- tierces consultées qui se contredisaient sensiblement entre elles sur
+-- ces mêmes montants.
+--
+-- MÉCANISME (nouveau type 'montant_par_unite_a_seuil', voir schema.sql et
+-- calculator.py) : le tarif en €/hL de boisson dépend d'un SEUIL de
+-- concentration (kg de sucres ajoutés par hL pour la première contribution,
+-- mg d'édulcorants par litre pour la seconde) — deux grandeurs différentes
+-- du volume de boisson auquel le tarif trouvé est ensuite appliqué.
+--
+-- Une boisson contenant À LA FOIS des sucres ajoutés ET des édulcorants de
+-- synthèse est soumise CUMULATIVEMENT aux deux contributions (Entreprendre.
+-- Service-Public.fr) — modélisé ici comme deux prélèvements indépendants,
+-- à additionner si les deux s'appliquent (pas de contrainte d'exclusivité
+-- dans le schéma, cohérent avec ce cumul réel).
+--
+-- LIMITE IMPORTANTE, ASSUMÉE ET DOCUMENTÉE : ces règles calculent le
+-- montant CORRECTEMENT si la teneur en sucre/édulcorant du produit est
+-- connue (valeur_seuil). Mais cette donnée n'existe PAS au niveau "famille
+-- de produit" de fr_categories_produits.sql — elle est propre à CHAQUE
+-- référence produit (deux sodas de marques différentes ont des teneurs
+-- différentes). La catégorie BOISSONS_SUCREES n'est donc PAS reliée à ces
+-- prélèvements dans categorie_prelevement à ce stade : seule la TVA (20%)
+-- y est rattachée pour l'instant. Le rattachement complet nécessite une
+-- donnée de composition par produit — objectif explicite du prochain lot
+-- (import Open Food Facts, qui expose la teneur en sucre par produit).
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'TAXE_BOISSONS_SUCRE', 'Contribution sur les boissons non alcooliques contenant des sucres ajoutés', 'Contribution on non-alcoholic beverages containing added sugars', 'Contribución sobre bebidas no alcohólicas con azúcares añadidos',
+       'Volume en hectolitres, tarif déterminé par la teneur en sucres ajoutés (kg par hL de boisson)', 'Art. 1613 ter du CGI'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'TAXE_BOISSONS_EDULCORANT', 'Contribution sur les boissons non alcooliques contenant des édulcorants de synthèse', 'Contribution on non-alcoholic beverages containing synthetic sweeteners', 'Contribución sobre bebidas no alcohólicas con edulcorantes sintéticos',
+       'Volume en hectolitres, tarif déterminé par la teneur en édulcorants de synthèse (mg par litre de boisson)', 'Art. 1613 quater du CGI'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, unite, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite_a_seuil', 'hL',
+       'BOFiP BOI-BAREME-000038 du 24/12/2025, tarifs 2026 (art. 1613 ter du CGI)',
+       'valeur_seuil = kg de sucres ajoutés par hL de boisson'
+FROM prelevement WHERE code = 'TAXE_BOISSONS_SUCRE';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, unite, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite_a_seuil', 'hL',
+       'BOFiP BOI-BAREME-000038 du 24/12/2025, tarifs 2026 (art. 1613 quater du CGI)',
+       'valeur_seuil = mg d''édulcorants de synthèse par litre de boisson'
+FROM prelevement WHERE code = 'TAXE_BOISSONS_EDULCORANT';
+
+-- Barème sucres ajoutés (BOFiP, tableau "II", tarifs 2026)
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 0, 5, 4.07 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='TAXE_BOISSONS_SUCRE';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 5, 8, 21.38 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='TAXE_BOISSONS_SUCRE';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 8, NULL, 35.63 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='TAXE_BOISSONS_SUCRE';
+
+-- Barème édulcorants de synthèse (BOFiP, tableau "I", tarifs 2026)
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 0, 120, 4.50 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='TAXE_BOISSONS_EDULCORANT';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 120, NULL, 6.00 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='TAXE_BOISSONS_EDULCORANT';
+
+-- =========================================================================
 -- Fin du contenu fiscal — Lot 3
 -- =========================================================================
