@@ -75,12 +75,12 @@ CREATE TABLE regle_prelevement (
     date_debut          TEXT NOT NULL,          -- date d'entrée en vigueur (incluse)
     date_fin            TEXT,                   -- date de fin (incluse) ; NULL = toujours en vigueur
     type_regle          TEXT NOT NULL CHECK (type_regle IN
-                            ('taux_fixe', 'montant_fixe', 'bareme_progressif', 'formule', 'montant_par_unite', 'montant_declare', 'bareme_a_seuil')),
+                            ('taux_fixe', 'montant_fixe', 'bareme_progressif', 'formule', 'montant_par_unite', 'montant_declare', 'bareme_a_seuil', 'montant_par_unite_a_seuil')),
     taux                REAL,                   -- pour type_regle = 'taux_fixe' (ex : 0.20 pour 20%)
     montant_fixe        REAL,                   -- pour type_regle = 'montant_fixe'
     formule             TEXT,                   -- pour type_regle = 'formule' (interprétée par le moteur applicatif)
     montant_unitaire    REAL,                   -- pour type_regle = 'montant_par_unite' (ex : 0.6829 pour la TICPE essence en €/L)
-    unite               TEXT,                   -- unité de référence de la règle (ex : 'L', 'kg', 'kWh') — pour type_regle = 'montant_par_unite'
+    unite               TEXT,                   -- unité de référence de la règle (ex : 'L', 'kg', 'kWh') — pour type_regle = 'montant_par_unite' ET 'montant_par_unite_a_seuil'
     -- type_regle = 'montant_declare' : aucune colonne numérique n'est renseignée
     -- (taux/montant_fixe/formule/montant_unitaire tous NULL). Ce type marque un
     -- prélèvement dont le montant n'est PAS calculable par le moteur (pas de taux
@@ -98,6 +98,16 @@ CREATE TABLE regle_prelevement (
     -- base entière (ex : la pension brute) — pas de cumul progressif. C'est un
     -- mécanisme "tout ou rien par palier", pas un calcul marginal. Voir
     -- fiscal_engine/calculator.py (fonction _trouver_taux_par_seuil).
+    --
+    -- type_regle = 'montant_par_unite_a_seuil' : combine 'montant_par_unite' et
+    -- 'bareme_a_seuil'. Une seule tranche est sélectionnée (via une valeur de
+    -- seuil), mais au lieu d'un TAUX, cette tranche fournit un MONTANT PAR UNITÉ
+    -- (colonne tranche_bareme.montant_unitaire, pas tranche_bareme.taux), ensuite
+    -- multiplié par une quantité (ex : un volume). Cas d'usage réel : la
+    -- contribution sur les boissons sucrées, où le tarif en €/hL dépend de la
+    -- teneur en sucre (kg/hL) de la boisson — deux grandeurs différentes, comme
+    -- pour 'bareme_a_seuil'. Voir fiscal_engine/calculator.py
+    -- (fonction _trouver_montant_unitaire_par_seuil).
     -- assiette : uniquement significatif pour type_regle = 'taux_fixe'.
     --   'base_directe' : le taux s'applique tel quel sur la base fournie
     --                    (ex : cotisation calculée sur un salaire brut).
@@ -157,8 +167,10 @@ CREATE TABLE tranche_bareme (
     regle_id        INTEGER NOT NULL REFERENCES regle_prelevement(id),
     borne_min       REAL NOT NULL,
     borne_max       REAL,                       -- NULL = pas de plafond (dernière tranche)
-    taux            REAL NOT NULL,
-    UNIQUE (regle_id, borne_min)
+    taux            REAL,                       -- pour 'bareme_progressif' et 'bareme_a_seuil' (NULL sinon)
+    montant_unitaire REAL,                      -- pour 'montant_par_unite_a_seuil' uniquement (NULL sinon)
+    UNIQUE (regle_id, borne_min),
+    CHECK ((taux IS NOT NULL) OR (montant_unitaire IS NOT NULL))
 );
 
 CREATE INDEX idx_tranche_bareme_regle ON tranche_bareme(regle_id);
