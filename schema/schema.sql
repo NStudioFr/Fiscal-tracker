@@ -215,7 +215,19 @@ CREATE TABLE produit_reference (
     code_barre              TEXT UNIQUE,
     nom                     TEXT,
     source                  TEXT CHECK (source IN ('OFF', 'OPF', 'manuel')),
-    categorie_produit_id    INTEGER REFERENCES categorie_produit(id)
+    categorie_produit_id    INTEGER REFERENCES categorie_produit(id),
+    -- Données nutritionnelles minimales nécessaires au calcul des taxes sur
+    -- les boissons sucrées/édulcorées (voir TAXE_BOISSONS_SUCRE et
+    -- TAXE_BOISSONS_EDULCORANT dans seed_data/fr_seed_lot3.sql). Alimentées
+    -- par l'import Open Food Facts (imports/off_import.py) — NULL si
+    -- inconnu ou non applicable (produit non alimentaire, etc.).
+    teneur_sucre_100g       REAL,               -- grammes de sucre pour 100g/100mL (champ OFF 'sugars_100g')
+                                                 -- Approximation utilisée comme kg de sucres ajoutés par
+                                                 -- hectolitre (voir imports/off_import.py pour la justification).
+    contient_edulcorants    INTEGER CHECK (contient_edulcorants IN (0, 1))  -- présence d'édulcorants de synthèse
+                                                 -- (détectée via les additifs déclarés OFF). NE PERMET PAS de
+                                                 -- connaître la concentration exacte en mg/L requise par le
+                                                 -- barème officiel — seule la présence/absence est connue.
 );
 
 CREATE INDEX idx_produit_reference_categorie ON produit_reference(categorie_produit_id);
