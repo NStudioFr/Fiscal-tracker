@@ -43,7 +43,19 @@
   - Barème sucre : <5kg/hL→4,07€ / 5-8→21,38€ / >8→35,63€ ; barème édulcorant : ≤120mg/L→4,50€ / >120→6€
   - PAS ENCORE reliée à BOISSONS_SUCREES (nécessite teneur en sucre par produit,
     pas par famille) — en attente de l'import OFF pour le rattachement complet
-    
+- [x] Point 1 (feuille de route) : autres prélèvements FR (PFU, CSG retraite via
+  nouveau mécanisme bareme_a_seuil)
+- [x] Point 2 : mapping produits (32 catégories) + taxe soda officielle BOFiP
+  (nouveau mécanisme montant_par_unite_a_seuil)
+- [x] Point 3 : import Open Food Facts — 119/119 tests au total
+  - imports/off_import.py : filtrage France + mapping catégories + import BDD
+  - Boucle complète validée : code-barres -> teneur sucre OFF -> calcul taxe soda exact
+  - LIMITE : extraction d'OFF à réaliser pour test réel
+  - LIMITE : mapping catégories OFF partiel (~25 tags), à enrichir avec l'usage réel
+  - LIMITE : contient_edulcorants = présence seulement (pas la concentration
+    mg/L requise par le barème officiel) — permet de savoir qu'une contribution
+    s'applique probablement, pas son montant exact sans donnée complémentaire
+        
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
 - Quotient familial, décote, plafonnement IR non gérés
@@ -54,6 +66,13 @@
 - Fiabilité entièrement dépendante de la qualité du scan/photo (démontré sur les 3
   exemples fournis : très bon sur le ticket net, très partiel sur le ticket dégradé)
 - Rayons détectés = affichage indicatif seulement, aucun prélèvement n'en est déduit
+
+## Angles morts identifiés à traiter plus tard
+- Droits sur le tabac : réels, structure complexe (ad valorem + spécifique + minimum
+  de perception + prix fixé par arrêté par référence) — nécessiterait une table de
+  prix par marque, hors périmètre actuel
+- Droits d'accise sur l'alcool : non recherchés systématiquement, à vérifier
+- Éco-contributions (DEEE, textile...) : non recherchées systématiquement
 
 ## Limites assumées de foyer.py (documentées dans le module)
 - Garde alternée non gérée (quart de part au lieu de demi-part)
@@ -83,8 +102,9 @@ ventilation par typologie est légèrement imprécise dans ce cas précis).
 4. ✅ Régime des indépendants
 
 ## État global du projet
-Moteur fiscal (Lots 1-4, Points 1-4) + ingestion complète (fiche de paie, avis
-d'imposition, facture, ticket de caisse) = les deux piliers du projet sont posés.
+Moteur fiscal (7 mécanismes de calcul génériques) + ingestion complète (4 types de
+documents + diagnostic qualité) + mapping produits (32 catégories) + import OFF =
+tous les grands piliers du projet sont maintenant posés.
 
 ## Prochaines pistes possibles
 - UI (saisie, dashboard, exports)
