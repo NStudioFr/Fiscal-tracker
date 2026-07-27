@@ -347,6 +347,32 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
             (id_regle_soda, borne_min, borne_max, montant_unitaire),
         )
 
+    # Prélèvements de test pour le tabac (formule officielle max(taux*prix + tarif*qte/1000, minimum*qte/1000))
+    conn.execute(
+        """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
+           VALUES ('FR', ?, 'ACCISE_TABAC_TEST', 'Accise tabac de test', 'Test')""",
+        (id_typo_ir,),
+    )
+    id_tabac_test = conn.execute("SELECT id FROM prelevement WHERE code = 'ACCISE_TABAC_TEST'").fetchone()["id"]
+    conn.execute(
+        """INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference)
+           VALUES (?, '2026-01-01', NULL, 'formule', 'max(0.55*base + 73.30*(quantite/1000), 381.90*(quantite/1000))', 'Test')""",
+        (id_tabac_test,),
+    )
+
+    # Prélèvements de test pour l'alcool (formule à deux facteurs, variable 'seuil')
+    conn.execute(
+        """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
+           VALUES ('FR', ?, 'ACCISE_BIERE_TEST', 'Accise biere de test', 'Test')""",
+        (id_typo_ir,),
+    )
+    id_biere_test = conn.execute("SELECT id FROM prelevement WHERE code = 'ACCISE_BIERE_TEST'").fetchone()["id"]
+    conn.execute(
+        """INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference)
+           VALUES (?, '2026-01-01', NULL, 'formule', 'quantite * seuil * 8.24', 'Test')""",
+        (id_biere_test,),
+    )
+
     conn.execute(
         """INSERT INTO categorie_produit (code, libelle_fr, type_depense_id)
            VALUES ('EPICERIE_SALEE', 'Épicerie salée', ?)""",
@@ -370,6 +396,8 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
         "id_prelevement_declaree": id_prelevement_declaree,
         "id_prelevement_seuil": id_prelevement_seuil,
         "id_prelevement_soda": id_prelevement_soda,
+        "id_tabac_test": id_tabac_test,
+        "id_biere_test": id_biere_test,
         "id_categorie": id_categorie,
     }
 
@@ -869,6 +897,39 @@ class TestMontantParUniteASeuil(unittest.TestCase):
         regle = resolver.resoudre_regle(self.conn, self.ids["id_prelevement_soda"], "2026-06-01")
         with self.assertRaises(ValueError):
             calculator.calculer_montant(self.conn, regle, montant=200.0, quantite=1.0, unite_quantite="hL")
+
+
+class TestFormuleAvecSeuilEtTabac(unittest.TestCase):
+    def setUp(self):
+        self.conn = _creer_bdd_test()
+        self.ids = _inserer_donnees_de_base(self.conn)
+
+    def test_formule_tabac_sous_le_minimum_de_perception(self):
+        # Prix tres bas (1E, fictif) : le minimum de perception doit s'appliquer
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_tabac_test"], "2026-06-01")
+        resultat = calculator.calculer_montant(self.conn, regle, montant=1.0, quantite=20.0)
+        minimum_attendu = 381.90 * (20.0 / 1000)
+        self.assertAlmostEqual(resultat["montant"], minimum_attendu, places=4)
+
+    def test_formule_tabac_au_dessus_du_minimum(self):
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_tabac_test"], "2026-06-01")
+        resultat = calculator.calculer_montant(self.conn, regle, montant=11.50, quantite=20.0)
+        self.assertAlmostEqual(resultat["montant"], 7.791, places=3)
+
+    def test_formule_expose_valeur_seuil_comme_variable_seuil(self):
+        # quantite=volume(hL), seuil=degre d'alcool -> formule "quantite*seuil*8.24"
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_biere_test"], "2026-06-01")
+        resultat = calculator.calculer_montant(
+            self.conn, regle, montant=0.0, quantite=0.0033, valeur_seuil=5.0
+        )
+        self.assertAlmostEqual(resultat["montant"], 0.0033 * 5.0 * 8.24, places=6)
+
+    def test_formule_sans_valeur_seuil_ne_definit_pas_la_variable(self):
+        # Si la formule reference 'seuil' mais qu'aucune valeur_seuil n'est
+        # fournie, l'erreur doit etre explicite (variable inconnue).
+        regle = resolver.resoudre_regle(self.conn, self.ids["id_biere_test"], "2026-06-01")
+        with self.assertRaises(FormuleInvalide):
+            calculator.calculer_montant(self.conn, regle, montant=0.0, quantite=0.0033)
 
 
 class TestMontantDeclare(unittest.TestCase):
