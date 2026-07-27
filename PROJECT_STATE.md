@@ -55,6 +55,14 @@
   - LIMITE : contient_edulcorants = présence seulement (pas la concentration
     mg/L requise par le barème officiel) — permet de savoir qu'une contribution
     s'applique probablement, pas son montant exact sans donnée complémentaire
+  - [x] Angles morts tabac + alcool comblés, sources exclusivement officielles
+  (douane.gouv.fr) — 133/133 tests au total
+  - Nouveau module fiscal_engine/alcool.py (bière par seuil, spiritueux + cotisation
+    sécu conditionnelle >18%)
+  - calculator.py : variable 'seuil' désormais exposée dans les formules (généralise
+    valeur_seuil au-delà des seuls cas de sélection de tranche)
+  - Tabac validé à l'euro près sur 2 exemples chiffrés officiels (paquets 11,50€/13,50€)
+  - Alcool validé cohérent (vin, bière, spiritueux) avec le barème exact 2026
         
 ## Points ouverts / limitations assumées
 - Majoration régionale de la TICPE non gérée (taux national uniquement)
@@ -66,6 +74,9 @@
 - Fiabilité entièrement dépendante de la qualité du scan/photo (démontré sur les 3
   exemples fournis : très bon sur le ticket net, très partiel sur le ticket dégradé)
 - Rayons détectés = affichage indicatif seulement, aucun prélèvement n'en est déduit
+- Éco-contributions (DEEE, textile, mobilier) : hors périmètre — barèmes par
+éco-organisme semi-privé (Ecologic, ecosystem, Citeo), pas un taux national
+simple, nécessiterait un import dédié de grande ampleur
 
 ## Angles morts identifiés à traiter plus tard
 - Droits sur le tabac : réels, structure complexe (ad valorem + spécifique + minimum
@@ -102,9 +113,9 @@ ventilation par typologie est légèrement imprécise dans ce cas précis).
 4. ✅ Régime des indépendants
 
 ## État global du projet
-Moteur fiscal (7 mécanismes de calcul génériques) + ingestion complète (4 types de
-documents + diagnostic qualité) + mapping produits (32 catégories) + import OFF =
-tous les grands piliers du projet sont maintenant posés.
+Moteur fiscal (8 mécanismes génériques) + ingestion (4 documents + diagnostic
+qualité) + mapping produits (32 catégories + tabac/alcool) + import OFF = tous
+les grands piliers identifiés sont maintenant posés.
 
 ## Prochaines pistes possibles
 - UI (saisie, dashboard, exports)
