@@ -11,7 +11,10 @@ la ligne comme assiette :
   - 'montant_fixe' : ignore `montant`/`quantite`, renvoie un montant constant.
   - 'formule' : utilise `montant` et `quantite`, disponibles comme variables
     'base' et 'quantite' dans la formule, ENRICHIES de tous les paramètres
-    de référence versionnés en vigueur à `date_reference` (ex : 'PMSS_MENSUEL').
+    de référence versionnés en vigueur à `date_reference` (ex : 'PMSS_MENSUEL'),
+    et de `valeur_seuil` si fourni (disponible sous le nom 'seuil' — utile
+    comme second facteur numérique générique, ex : le degré d'alcool d'une
+    boisson combiné à son volume : "quantite * seuil * 8.24").
     C'est ce mécanisme qui permet d'exprimer un plafonnement ou un seuil
     (ex : "min(base, PMSS_MENSUEL) * 0.069") sans ajouter de colonne dédiée
     à regle_prelevement à chaque nouveau cas de plafond rencontré.
@@ -136,6 +139,13 @@ def calculer_montant(
 
     if type_regle == "formule":
         variables = {"base": montant, "quantite": quantite}
+        if valeur_seuil is not None:
+            # Réutilisation de valeur_seuil comme second facteur numérique
+            # générique (pas nécessairement un "seuil" au sens strict ici) —
+            # ex : le degré d'alcool d'une boisson, combiné à son volume
+            # (quantite) dans une formule comme "quantite * seuil * 8.24"
+            # pour les droits d'accise sur la bière (voir fiscal_engine/alcool.py).
+            variables["seuil"] = valeur_seuil
         if date_reference is not None:
             variables.update(charger_parametres_disponibles(conn, pays_code, date_reference))
         montant_calcule = evaluer_formule(regle["formule"], variables)
