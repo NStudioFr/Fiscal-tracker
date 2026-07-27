@@ -42,7 +42,8 @@ INSERT INTO typologie_prelevement (code, libelle_fr, libelle_en, libelle_es) VAL
     ('COTIS_SOC',    'Cotisations sociales',            'Social contributions',   'Cotizaciones sociales'),
     ('IMPOT_REVENU', 'Impôt sur le revenu',             'Income tax',             'Impuesto sobre la renta'),
     ('TAXE_ECO',     'Taxes écologiques / énergétiques','Environmental/energy taxes', 'Impuestos ecológicos/energéticos'),
-    ('IMPOTS_LOCAUX','Impôts locaux',                   'Local taxes',            'Impuestos locales');
+    ('IMPOTS_LOCAUX','Impôts locaux',                   'Local taxes',            'Impuestos locales'),
+    ('ACCISES',      'Droits d''accise (tabac, alcool)','Excise duties (tobacco, alcohol)', 'Derechos de accisa (tabaco, alcohol)');
 
 -- -------------------------------------------------------------------------
 -- Types de dépense (axe de ventilation n°2)
@@ -718,6 +719,193 @@ INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
 SELECT rp.id, 0, 120, 4.50 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='TAXE_BOISSONS_EDULCORANT';
 INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
 SELECT rp.id, 120, NULL, 6.00 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='TAXE_BOISSONS_EDULCORANT';
+
+-- =========================================================================
+-- Droits d'accise sur le tabac manufacturé
+-- =========================================================================
+-- Source EXCLUSIVEMENT officielle : douane.gouv.fr, page "La fiscalité
+-- appliquée aux tabacs manufacturés..." (mise à jour du 05/01/2026), citant
+-- l'article L.314-24 du code des impositions sur les biens et services
+-- (CIBS) et l'arrêté du 24/12/2025 (JORF n°0306 du 31/12/2025).
+--
+-- MÉCANISME (formule officielle, vérifiée à l'euro près contre les DEUX
+-- exemples chiffrés publiés par la douane elle-même - paquet "bas de
+-- marché" 11,50€ et "premium" 13,50€) :
+--   accise = MAX(taux% x prix_de_vente + tarif x (quantité/1000),
+--                minimum_de_perception x (quantité/1000))
+-- où `quantité` = nombre d'unités (cigarettes, cigares) ou de grammes
+-- (tabac à rouler/à chauffer). Exprimé nativement via le mécanisme
+-- 'formule' déjà existant (base=prix de vente, quantite=nombre d'unités),
+-- sans nécessiter de nouveau mécanisme de calcul.
+--
+-- La TVA sur le tabac est "en dedans" à 16,6667% du prix de vente au
+-- détail — mathématiquement identique à notre TVA_NORMAL (20%) en mode
+-- 'ttc_inclus' déjà existant (vérifié : 11,50 x 0,20/1,20 = 1,9167€,
+-- cohérent avec les 1,92€ de l'exemple officiel). Aucun nouveau
+-- prélèvement TVA nécessaire : TVA_NORMAL s'applique tel quel.
+--
+-- LIMITES ASSUMÉES : tabacs à priser et tabacs à mâcher n'ont ni tarif
+-- spécifique ni minimum de perception officiels (uniquement un taux
+-- ad valorem) — modélisés en 'taux_fixe' simple plutôt qu'en 'formule'.
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_TABAC_CIGARETTES', 'Accise sur les cigarettes', 'Excise duty on cigarettes', 'Impuesto especial sobre los cigarrillos',
+       'Prix de vente au détail (base) et nombre de cigarettes (quantité)', 'Art. L.314-24 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_TABAC_CIGARES', 'Accise sur les cigares et cigarillos', 'Excise duty on cigars and cigarillos', 'Impuesto especial sobre puros y cigarritos',
+       'Prix de vente au détail (base) et nombre de cigares (quantité)', 'Art. L.314-24 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_TABAC_ROULER', 'Accise sur le tabac fine coupe à rouler', 'Excise duty on fine-cut rolling tobacco', 'Impuesto especial sobre el tabaco de liar',
+       'Prix de vente au détail (base) et poids en grammes (quantité)', 'Art. L.314-24 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_TABAC_CHAUFFER_BATONNETS', 'Accise sur le tabac à chauffer (bâtonnets)', 'Excise duty on heated tobacco (sticks)', 'Impuesto especial sobre el tabaco calentado (varillas)',
+       'Prix de vente au détail (base) et nombre de bâtonnets (quantité)', 'Art. L.314-24 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_TABAC_PRISER', 'Accise sur le tabac à priser', 'Excise duty on snuff tobacco', 'Impuesto especial sobre el tabaco para inhalar',
+       'Prix de vente au détail', 'Art. L.314-24 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_TABAC_MACHER', 'Accise sur le tabac à mâcher', 'Excise duty on chewing tobacco', 'Impuesto especial sobre el tabaco de mascar',
+       'Prix de vente au détail', 'Art. L.314-24 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'max(0.55*base + 73.30*(quantite/1000), 381.90*(quantite/1000))',
+       'douane.gouv.fr, tarifs applicables au 01/01/2026 (arrêté du 24/12/2025) — formule vérifiée à l''euro près contre les 2 exemples chiffrés officiels (paquets à 11,50€ et 13,50€)',
+       'base = prix de vente au détail payé ; quantite = nombre de cigarettes (20 pour un paquet standard)'
+FROM prelevement WHERE code = 'ACCISE_TABAC_CIGARETTES';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'max(0.363*base + 56.20*(quantite/1000), 305.00*(quantite/1000))',
+       'douane.gouv.fr, tarifs applicables au 01/01/2026 (arrêté du 24/12/2025)',
+       'base = prix de vente au détail ; quantite = nombre de cigares/cigarillos'
+FROM prelevement WHERE code = 'ACCISE_TABAC_CIGARES';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'max(0.491*base + 105.00*(quantite/1000), 358.60*(quantite/1000))',
+       'douane.gouv.fr, tarifs applicables au 01/01/2026 (arrêté du 24/12/2025)',
+       'base = prix de vente au détail ; quantite = poids en grammes'
+FROM prelevement WHERE code = 'ACCISE_TABAC_ROULER';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'max(0.514*base + 50.90*(quantite/1000), 336.00*(quantite/1000))',
+       'douane.gouv.fr, tarifs applicables au 01/01/2026 (arrêté du 24/12/2025)',
+       'base = prix de vente au détail ; quantite = nombre de bâtonnets'
+FROM prelevement WHERE code = 'ACCISE_TABAC_CHAUFFER_BATONNETS';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.581, 'base_directe', 'douane.gouv.fr, tarifs applicables au 01/01/2026 — pas de tarif spécifique ni de minimum de perception pour cette catégorie'
+FROM prelevement WHERE code = 'ACCISE_TABAC_PRISER';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.407, 'base_directe', 'douane.gouv.fr, tarifs applicables au 01/01/2026 — pas de tarif spécifique ni de minimum de perception pour cette catégorie'
+FROM prelevement WHERE code = 'ACCISE_TABAC_MACHER';
+
+-- =========================================================================
+-- Droits d'accise sur les boissons alcooliques
+-- =========================================================================
+-- Source EXCLUSIVEMENT officielle : douane.gouv.fr, page "Droits des
+-- alcools et boissons alcooliques" (mise à jour du 15/01/2026), tarifs 2026
+-- fixés par arrêté du 24/12/2025 (JORF n°0306 du 31/12/2025), citant les
+-- articles L.313-15, L.313-20, L.313-21, L.313-23 et L.313-24/25 du CIBS.
+--
+-- Vin, cidre et produits intermédiaires : tarif fixe par hectolitre,
+-- INDÉPENDANT du degré d'alcool -> 'montant_par_unite' simple, pas
+-- d'orchestration nécessaire (utilisables directement via categorie_prelevement).
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_VIN_TRANQUILLE', 'Droit de circulation sur les vins tranquilles', 'Excise duty on still wine', 'Impuesto especial sobre el vino tranquilo',
+       'Volume en hectolitres', 'Art. L.313-15 et L.313-20 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_VIN_MOUSSEUX', 'Droit de circulation sur les vins mousseux', 'Excise duty on sparkling wine', 'Impuesto especial sobre el vino espumoso',
+       'Volume en hectolitres', 'Art. L.313-15 et L.313-20 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_CIDRE_POIRE_HYDROMEL', 'Droit de circulation sur les cidres, poirés et hydromels', 'Excise duty on cider, perry and mead', 'Impuesto especial sobre la sidra, perada e hidromiel',
+       'Volume en hectolitres', 'Art. L.313-21 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_PRODUIT_INTERMEDIAIRE_AUTRE', 'Droit de circulation sur les autres produits intermédiaires (hors VDN/VDL AOP)', 'Excise duty on other intermediate products', 'Impuesto especial sobre otros productos intermedios',
+       'Volume en hectolitres', 'Art. L.313-15 et L.313-20 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 4.19, 'hL', 'douane.gouv.fr, tarif 2026 (arrêté du 24/12/2025)'
+FROM prelevement WHERE code = 'ACCISE_VIN_TRANQUILLE';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 10.38, 'hL', 'douane.gouv.fr, tarif 2026 (arrêté du 24/12/2025)'
+FROM prelevement WHERE code = 'ACCISE_VIN_MOUSSEUX';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 1.46, 'hL', 'douane.gouv.fr, tarif 2026 (arrêté du 24/12/2025)'
+FROM prelevement WHERE code = 'ACCISE_CIDRE_POIRE_HYDROMEL';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 209.53, 'hL', 'douane.gouv.fr, tarif 2026 (arrêté du 24/12/2025)'
+FROM prelevement WHERE code = 'ACCISE_PRODUIT_INTERMEDIAIRE_AUTRE';
+
+-- Bière : tarif par hL ET par degré -> mécanisme 'formule' à deux facteurs
+-- (quantite=volume en hL, seuil=degré d'alcool), orchestré par
+-- fiscal_engine/alcool.py (calculer_droit_biere) qui choisit la bonne
+-- règle selon le seuil de 2,8% vol.
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_BIERE_LEGERE', 'Droit d''accise sur la bière (≤2,8% vol.)', 'Excise duty on beer (≤2.8% vol.)', 'Impuesto especial sobre la cerveza (≤2,8% vol.)',
+       'Volume en hectolitres x degré d''alcool', 'Art. L.313-15 et L.313-20 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_BIERE_NORMALE', 'Droit d''accise sur la bière (>2,8% vol.)', 'Excise duty on beer (>2.8% vol.)', 'Impuesto especial sobre la cerveza (>2,8% vol.)',
+       'Volume en hectolitres x degré d''alcool', 'Art. L.313-15 et L.313-20 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'quantite * seuil * 4.12',
+       'douane.gouv.fr, tarif 2026 (arrêté du 24/12/2025)',
+       'quantite = volume en hL ; seuil = degré d''alcool (réutilisation du mécanisme de seuil comme second facteur)'
+FROM prelevement WHERE code = 'ACCISE_BIERE_LEGERE';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'quantite * seuil * 8.24',
+       'douane.gouv.fr, tarif 2026 (arrêté du 24/12/2025)',
+       'quantite = volume en hL ; seuil = degré d''alcool'
+FROM prelevement WHERE code = 'ACCISE_BIERE_NORMALE';
+
+-- Spiritueux : tarif par hectolitre d'alcool pur (hlap) -> formule
+-- quantite(hL) x seuil(degré)/100 x tarif, + cotisation sécu additionnelle
+-- si degré > 18%, orchestré par fiscal_engine/alcool.py (calculer_droit_spiritueux).
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_SPIRITUEUX', 'Droit de consommation sur les spiritueux', 'Excise duty on spirits', 'Impuesto especial sobre las bebidas espirituosas',
+       'Volume en hectolitres x (degré d''alcool / 100), soit l''équivalent en hectolitres d''alcool pur (hlap)', 'Art. L.313-15 et L.313-20 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'COTIS_SOC_ALCOOL_FORT', 'Cotisation sécurité sociale sur les alcools titrant plus de 18% vol.', 'Social security contribution on beverages over 18% vol.', 'Cotización de seguridad social sobre bebidas de más de 18% vol.',
+       'Volume en hectolitres x (degré d''alcool / 100) — uniquement si degré > 18% vol.', 'Art. L.245-9 1° CSS'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'quantite * (seuil/100) * 1932.42',
+       'douane.gouv.fr, tarif "autres alcools" 2026 (arrêté du 24/12/2025). Ne distingue PAS les rhums des DOM (tarif spécifique 966,75€/hlap, non géré)',
+       'quantite = volume en hL ; seuil = degré d''alcool (titre alcoométrique volumique)'
+FROM prelevement WHERE code = 'ACCISE_SPIRITUEUX';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'quantite * (seuil/100) * 620.47',
+       'douane.gouv.fr, tarif 2026 (arrêté du 24/12/2025), Art. L.245-9 1° CSS — cumulative avec ACCISE_SPIRITUEUX, pas alternative',
+       'Applicable uniquement si degré > 18% vol. (condition gérée par fiscal_engine/alcool.py, pas par cette règle elle-même)'
+FROM prelevement WHERE code = 'COTIS_SOC_ALCOOL_FORT';
 
 -- =========================================================================
 -- Fin du contenu fiscal — Lot 3
