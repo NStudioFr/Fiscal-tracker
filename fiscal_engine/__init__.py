@@ -18,9 +18,11 @@ Modules :
     retraite      — CSG/CRDS/CASA sur pension de retraite, premier usage réel
                     du mécanisme 'bareme_a_seuil' (sélection de taux par seuil,
                     pas de cumul progressif)
+    alcool        — droits d'accise sur la bière et les spiritueux (formule à
+                    deux facteurs : volume x degré d'alcool)
     orchestrator  — orchestration complète pour une ligne de document
     aggregator    — requêtes de reporting (totaux, ventilations)
     exceptions    — exceptions spécifiques au moteur
 """
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
