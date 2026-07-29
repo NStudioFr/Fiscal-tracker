@@ -567,41 +567,51 @@ FROM prelevement WHERE code = 'PS_CAPITAL_ASSURANCE_VIE';
 -- différentes, d'où le paramètre valeur_seuil distinct de montant dans
 -- calculer_montant().
 --
--- AVERTISSEMENT DE SOURCING (à prendre au sérieux) : les seuils RFR exacts
--- pour 2026 varient sensiblement selon les sources spécialisées consultées
--- (deux groupes de sources donnent des seuils différents de plusieurs
--- centaines d'euros). Les valeurs retenues ci-dessous s'appuient sur le
--- groupe de sources le plus large et le plus cohérent entre elles trouvé
--- (5 sources indépendantes convergentes à quelques euros près, cohérentes
--- avec la revalorisation +1,8% annoncée pour 2026), mais restent une
--- ESTIMATION, pas une valeur officielle vérifiée sur le texte réglementaire
--- lui-même (BOFiP / décret). L'utilisateur doit vérifier ces seuils sur son
--- avis d'imposition ou via le simulateur officiel avant toute décision
--- s'appuyant dessus.
+-- SOURCING (vérifié le 2026-07-29) : seuils RFR 2026 confirmés par la
+-- source officielle « L'Assurance Retraite » (CNAV, gestionnaire du régime
+-- général), page "Prélèvements sociaux en 2026 : augmentation des seuils",
+-- mise à jour le 09/01/2026 :
+-- https://www.lassuranceretraite.fr/portail-info/hors-menu/actualites-nationales/retraite/2026/prelevements-sociaux-2025.html
+-- Une divergence a été trouvée par rapport à une version antérieure de ce
+-- fichier : le seuil médian/normal à 2 parts était fixé à 39 886 € (valeur
+-- 2025, non revalorisée) au lieu de 40 604 € (valeur 2026 officielle,
+-- +1,8% conforme à la revalorisation annoncée). Corrigé le 2026-07-29.
+-- Tous les autres seuils (1 part et 2 parts) concordaient déjà avec la
+-- source officielle et n'ont pas été modifiés.
+--
+-- LIMITE RÉSIDUELLE : la source officielle documente aussi le mécanisme de
+-- "lissage" (un franchissement de seuil pendant une seule année ne fait pas
+-- changer de tranche pour le taux réduit -> médian ; en revanche AUCUN
+-- lissage n'existe pour le passage médian -> normal). Ce lissage n'est
+-- toujours PAS implémenté par ce module (voir fiscal_engine/retraite.py) :
+-- le taux appliqué correspond strictement au RFR fourni, sans mémoire des
+-- années précédentes. L'utilisateur reste invité à vérifier son propre taux
+-- sur son avis d'imposition ou son espace personnel lassuranceretraite.fr.
 --
 -- PÉRIMÈTRE : seuls 1 part et 2 parts sont modélisés (les foyers avec
--- d'autres nombres de parts, ex 1,5 ou 2,5, ne sont pas couverts — les
--- seuils intermédiaires ne suivent pas une simple règle proportionnelle
--- vérifiable facilement).
+-- d'autres nombres de parts, ex 1,5 ou 2,5, ne sont pas couverts — la
+-- source officielle donne pourtant des seuils précis pour 1,5 / 2,5 / 3
+-- parts et par demi-part supplémentaire, qui pourraient être ajoutés dans
+-- une prochaine itération).
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
 SELECT 'FR', id, 'CSG_RETRAITE_1PART', 'CSG sur pension de retraite (foyer à 1 part)', 'CSG on retirement pension (1 tax share household)', 'CSG sobre pensión de jubilación (hogar de 1 parte)',
-       'Taux sélectionné selon le RFR du foyer, appliqué à la pension brute', 'Art. L136-8 CSS — seuils estimés, à vérifier sur l''avis d''imposition'
+       'Taux sélectionné selon le RFR du foyer, appliqué à la pension brute', 'Art. L136-8 CSS — seuils confirmés par L''Assurance Retraite (CNAV), officiel'
 FROM typologie_prelevement WHERE code = 'COTIS_SOC';
 
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
 SELECT 'FR', id, 'CSG_RETRAITE_2PARTS', 'CSG sur pension de retraite (foyer à 2 parts)', 'CSG on retirement pension (2 tax shares household)', 'CSG sobre pensión de jubilación (hogar de 2 partes)',
-       'Taux sélectionné selon le RFR du foyer, appliqué à la pension brute', 'Art. L136-8 CSS — seuils estimés, à vérifier sur l''avis d''imposition'
+       'Taux sélectionné selon le RFR du foyer, appliqué à la pension brute', 'Art. L136-8 CSS — seuils confirmés par L''Assurance Retraite (CNAV), officiel'
 FROM typologie_prelevement WHERE code = 'COTIS_SOC';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, source_reference, commentaire)
 SELECT id, '2026-01-01', NULL, 'bareme_a_seuil',
-       'Art. L136-8 CSS — seuils 2026 estimés (consensus de 5 sources : signal-alpha.fr, mabonneretraite.fr, quelles-aides.fr, la-juvenie.fr, cesdefrance.fr), +1,8% de revalorisation 2026',
+       'Art. L136-8 CSS — seuils 2026 confirmés par L''Assurance Retraite (CNAV), tableau officiel mis à jour le 09/01/2026, +1,8% de revalorisation 2026',
        'Seuils RFR 2024 (avis d''imposition 2025), pour une pension versée en 2026, foyer à 1 part'
 FROM prelevement WHERE code = 'CSG_RETRAITE_1PART';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, source_reference, commentaire)
 SELECT id, '2026-01-01', NULL, 'bareme_a_seuil',
-       'Art. L136-8 CSS — seuils 2026 estimés (consensus de 5 sources : signal-alpha.fr, mabonneretraite.fr, quelles-aides.fr, la-juvenie.fr, cesdefrance.fr), +1,8% de revalorisation 2026',
+       'Art. L136-8 CSS — seuils 2026 confirmés par L''Assurance Retraite (CNAV), tableau officiel mis à jour le 09/01/2026, +1,8% de revalorisation 2026',
        'Seuils RFR 2024 (avis d''imposition 2025), pour une pension versée en 2026, foyer à 2 parts'
 FROM prelevement WHERE code = 'CSG_RETRAITE_2PARTS';
 
@@ -621,9 +631,9 @@ SELECT rp.id, 0, 20016, 0.000 FROM regle_prelevement rp JOIN prelevement p ON p.
 INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
 SELECT rp.id, 20016, 26167, 0.038 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
 INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
-SELECT rp.id, 26167, 39886, 0.066 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
+SELECT rp.id, 26167, 40604, 0.066 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
 INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
-SELECT rp.id, 39886, NULL, 0.083 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
+SELECT rp.id, 40604, NULL, 0.083 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
 
 -- CRDS retraite : 0,5%, due dès que le taux de CSG > 0% (donc pas en cas
 -- d'exonération). CASA retraite : 0,3%, due uniquement aux taux médian et
