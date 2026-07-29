@@ -9,8 +9,7 @@
 
 Ce document remplace et consolide tous les `PROJECT_STATE.md` précédents,
 devenus trop longs et redondants au fil du développement. Il est conçu pour
-qu'une **nouvelle conversation avec Claude** (ou toi-même en le relisant)
-puisse reprendre le projet sans rien perdre.
+pouvoir reprendre le projet sans rien perdre.
 
 **Pour reprendre le développement dans une nouvelle conversation**, commence
 ton message par quelque chose comme :
