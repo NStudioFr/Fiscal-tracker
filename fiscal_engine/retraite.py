@@ -17,13 +17,22 @@ Autrement dit : CRDS s'applique dès que la CSG n'est pas nulle ; CASA ne
 s'applique qu'aux deux tranches les plus hautes.
 
 LIMITES ASSUMÉES (voir aussi seed_data/fr_seed_lot3.sql) :
-  - Seuils RFR 2026 estimés par recoupement de sources spécialisées, PAS
-    vérifiés sur un texte réglementaire officiel — à confirmer par
-    l'utilisateur sur son propre avis d'imposition.
+  - Seuils RFR 2026 vérifiés le 2026-07-29 sur la source officielle
+    « L'Assurance Retraite » (CNAV) — voir seed_data/fr_seed_lot3.sql pour
+    le détail et l'URL. Une erreur a été trouvée et corrigée à cette
+    occasion (seuil médian/normal à 2 parts : 39 886 € [valeur 2025] ->
+    40 604 € [valeur 2026 officielle]). L'utilisateur reste invité à
+    confirmer son propre taux sur son avis d'imposition, notamment en cas
+    de "lissage" (voir limite suivante).
   - Seuls les foyers à 1 ou 2 parts sont couverts.
-  - Le mécanisme de "lissage" (un franchissement de seuil ponctuel ne fait
-    changer de tranche qu'après 2 années consécutives) n'est PAS géré : ce
-    module applique toujours le taux correspondant strictement au RFR fourni.
+  - Le mécanisme de "lissage" n'est PAS géré : ce module applique toujours
+    le taux correspondant strictement au RFR fourni, sans mémoire des
+    années précédentes. Précision issue de la source officielle CNAV : ce
+    lissage ne joue QUE pour le passage réduit (3,8%) -> médian (6,6%), un
+    franchissement isolé du seuil ne faisant changer de tranche qu'après 2
+    années consécutives de dépassement ; il n'existe AUCUN lissage pour le
+    passage médian (6,6%) -> normal (8,3%), qui s'applique immédiatement dès
+    que le RFR de l'année dépasse le seuil.
   - La part déductible de la CSG (partielle selon le taux) n'est pas
     calculée ici — seul le montant prélevé est produit.
 """
