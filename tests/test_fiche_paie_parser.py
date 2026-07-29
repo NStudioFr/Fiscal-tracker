@@ -16,8 +16,8 @@ from ingestion.fiche_paie import (
     parser_fiche_paie,
     _extraire_montant_salarial,
     _identifier_code_prelevement,
-    _normaliser,
 )
+from ingestion.texte_utils import normaliser
 
 
 class TestParserFichePaie(unittest.TestCase):
@@ -98,14 +98,14 @@ class TestParserFichePaieFormatReel(unittest.TestCase):
         ligne = "Dont déductible de l'impôt sur le revenu 3 733,50 6,8000 253,88 -"
         montant = _extraire_montant_salarial(ligne)
         self.assertAlmostEqual(montant, 253.88)
-        code = _identifier_code_prelevement(_normaliser(ligne))
+        code = _identifier_code_prelevement(normaliser(ligne))
         self.assertEqual(code, "CSG_DEDUCTIBLE")
 
     def test_csg_non_deductible_ligne_reelle(self):
         ligne = "Dont non déductible de l'impôt sur le revenu 3 733,50 2,9000 108,27 -"
         montant = _extraire_montant_salarial(ligne)
         self.assertAlmostEqual(montant, 108.27)
-        code = _identifier_code_prelevement(_normaliser(ligne))
+        code = _identifier_code_prelevement(normaliser(ligne))
         self.assertEqual(code, "CSG_NON_DEDUCTIBLE")
 
     def test_retraite_plafonnee_avec_part_patronale_prend_bien_le_salarial(self):
@@ -115,14 +115,14 @@ class TestParserFichePaieFormatReel(unittest.TestCase):
         ligne = "Retraite plafonnée 3 800,00 6,9000 262,20 8,5500 324,90"
         montant = _extraire_montant_salarial(ligne)
         self.assertAlmostEqual(montant, 262.20)  # PAS 324.90
-        code = _identifier_code_prelevement(_normaliser(ligne))
+        code = _identifier_code_prelevement(normaliser(ligne))
         self.assertEqual(code, "COTIS_VIEILLESSE_PLAF")
 
     def test_retraite_deplafonnee_avec_part_patronale(self):
         ligne = "Retraite déplafonnée 3 800,00 0,4000 15,20 2,0200 76,76"
         montant = _extraire_montant_salarial(ligne)
         self.assertAlmostEqual(montant, 15.20)  # PAS 76.76
-        code = _identifier_code_prelevement(_normaliser(ligne))
+        code = _identifier_code_prelevement(normaliser(ligne))
         self.assertEqual(code, "COTIS_VIEILLESSE_DEPLAF")
 
     def test_ligne_100_pourcent_patronale_sans_part_salariale_ignoree(self):
