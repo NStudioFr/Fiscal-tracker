@@ -64,22 +64,46 @@ GPS TomTom évoquée en tout début de conversation), langues cibles FR/EN/ES.
 
 ---
 
-## 3. ⚠️ ANOMALIE CONNUE À CORRIGER EN PRIORITÉ
+## 3. ✅ Anomalies résolues (session du 2026-07-29)
 
-**Le fichier `tests/fixtures/off_echantillon_synthetique.parquet` a été
-committé au mauvais endroit** : il se trouve actuellement à la racine du
-repo sous `fixtures/off_echantillon_synthetique.parquet`, alors que
-`tests/test_off_import.py` l'attend à
-`tests/fixtures/off_echantillon_synthetique.parquet` (ligne 27 du fichier
-de test : `CHEMIN_FIXTURE = Path(__file__).resolve().parent / "fixtures" / ...`).
+Quatre anomalies ont été trouvées et corrigées lors d'une session de
+vérification complète (repo cloné, `PROJECT_STATE.md` lu, suite de tests
+lancée) :
 
-**Conséquence** : tous les tests de `tests/test_off_import.py` (15 tests)
-échoueront tant que ce n'est pas corrigé.
+1. **Fixture `.parquet` mal placée** (déjà connue avant la session,
+   confirmée corrigée par l'utilisateur) : `off_echantillon_synthetique.parquet`
+   est maintenant bien dans `tests/fixtures/` (elle était à la racine sous
+   `fixtures/`). Les 15 tests de `test_off_import.py` passent.
+2. **Import cassé dans `tests/test_fiche_paie_parser.py`** : le test
+   importait encore `_normaliser` depuis `ingestion.fiche_paie`, une
+   fonction supprimée lors du refactor qui a créé
+   `ingestion/texte_utils.py` (le fichier de test n'avait pas été mis à
+   jour à cette occasion). Corrigé : import de `normaliser` depuis
+   `ingestion.texte_utils`.
+3. **Fixture manquante `tests/fixtures/fiche_paie_synthetique.png`** :
+   jamais committée (aucune trace dans l'historique git). Régénérée (image
+   de synthèse 1600×900, confiance OCR Tesseract ~91%, niveau "bon", zéro
+   avertissement — vérifié avec la vraie fonction
+   `ingestion.qualite.diagnostiquer_qualite`). Nécessite le pack
+   `tesseract-ocr-fra` (absent par défaut de l'environnement Claude, à
+   installer via `apt-get install -y tesseract-ocr-fra`).
+4. **Seuil RFR erroné pour la CSG retraite à 2 parts** (voir section 7.2) :
+   39886€ (valeur 2025) au lieu de 40604€ (valeur 2026 officielle
+   CNAV) — corrigé dans `seed_data/fr_seed_lot3.sql`, verrouillé par le
+   nouveau fichier `tests/test_retraite.py`.
 
-**Correctif** : déplacer le fichier vers `tests/fixtures/` sur GitHub (le
-télécharger depuis son emplacement actuel, le supprimer de `fixtures/`, le
-ré-uploader dans `tests/fixtures/`). Aucune régénération nécessaire, le
-contenu du fichier est correct.
+**Fichiers modifiés/créés localement lors de cette session, à uploader sur
+GitHub** (l'environnement Claude ne peut cloner/lire le repo, pas y
+pousser de commits) :
+- `tests/test_fiche_paie_parser.py` (modifié)
+- `tests/fixtures/fiche_paie_synthetique.png` (nouveau, binaire)
+- `seed_data/fr_seed_lot3.sql` (modifié — seuil 2 parts + commentaires de sourcing)
+- `fiscal_engine/retraite.py` (modifié — docstring de sourcing)
+- `tests/test_retraite.py` (nouveau)
+- `PROJECT_STATE.md` (ce document, mis à jour)
+
+**⚠️ Si tu commences une nouvelle session sans avoir uploadé ces fichiers**,
+ces mêmes anomalies (2, 3, 4) réapparaîtront et devront être re-corrigées.
 
 ---
 
@@ -116,10 +140,11 @@ Fiscal-tracker/
 │   └── ticket_caisse.py            — Parser ticket de caisse
 ├── imports/                      — Import de sources de données externes
 │   └── off_import.py              — Import Open Food Facts
-├── tests/                        — 133 tests au total (tous passants,
-│                                    hormis l'anomalie de la section 3)
+├── tests/                        — 143 tests au total (tous passants,
+│                                    2 skips intentionnels — voir section 3)
 │   ├── test_engine.py
 │   ├── test_alcool.py
+│   ├── test_retraite.py            — Vraies données seed (pas de mécanisme générique) : ajouté le 2026-07-29
 │   ├── test_fiche_paie_parser.py
 │   ├── test_avis_imposition_parser.py
 │   ├── test_facture_parser.py
@@ -207,17 +232,31 @@ n'importe quelle formule sans modification du schéma.
   frais réels...) n'est effectué par ce module.
 
 ### 7.2 CSG retraite (`fiscal_engine/retraite.py`)
-- **⚠️ Point le plus fragile du projet à ce jour** : les seuils RFR 2026
-  utilisés (13048€/17057€/26472€ pour 1 part, 20016€/26167€/39886€ pour 2
-  parts) sont une **estimation par recoupement de 5 sources tierces
-  concordantes**, PAS une valeur vérifiée sur un texte réglementaire
-  officiel (contrairement à tout le reste du contenu fiscal du projet). À
-  vérifier en priorité si cette fonctionnalité doit être fiabilisée
-  (chercher le décret/arrêté officiel fixant ces seuils pour les pensions
-  versées en 2026).
-- Seuls les foyers à 1 ou 2 parts sont couverts.
-- Le mécanisme de "lissage" (un franchissement de seuil ponctuel ne fait
-  changer de tranche qu'après 2 années consécutives) n'est pas géré.
+- **✅ Fiabilisé le 2026-07-29** : les seuils RFR 2026 sont désormais
+  vérifiés sur la source officielle « L'Assurance Retraite » (CNAV),
+  tableau mis à jour le 09/01/2026 :
+  https://www.lassuranceretraite.fr/portail-info/hors-menu/actualites-nationales/retraite/2026/prelevements-sociaux-2025.html
+  Seuils confirmés (1 part) : 13048€ / 17057€ / 26472€.
+  Seuils confirmés (2 parts) : 20016€ / 26167€ / **40604€** (corrigé, voir
+  ci-dessous).
+  **Une erreur réelle a été trouvée et corrigée** : le seuil médian/normal
+  à 2 parts était à 39886€ (valeur 2025, non revalorisée) au lieu de
+  40604€ (valeur 2026 officielle, +1,8%). Verrouillé par
+  `tests/test_retraite.py` (nouveau fichier, teste les vraies données du
+  seed plutôt que des seuils ronds arbitraires comme `test_engine.py`).
+- Convention de borne à noter (comportement du moteur générique, pas
+  spécifique à ce module) : à la valeur RFR exactement égale à une borne
+  haute (ex : RFR = 26472€ ou RFR = 40604€ pile), le taux INFÉRIEUR
+  s'applique encore (ex : médian, pas normal) — décalage d'un euro par
+  rapport au libellé CNAV "RFR > X€". Sans impact pratique réel, mais
+  documenté et testé explicitement (`test_valeur_exacte_du_seuil_haut_reste_median`).
+- Seuls les foyers à 1 ou 2 parts sont couverts (la source officielle
+  donne aussi des seuils pour 1,5 / 2,5 / 3 parts et par demi-part
+  supplémentaire — pourrait être ajouté dans une prochaine itération).
+- Le mécanisme de "lissage" n'est pas géré. Précision apportée par la
+  source officielle : ce lissage ne joue QUE pour le passage réduit
+  (3,8%) → médian (6,6%) ; il n'existe AUCUN lissage pour le passage
+  médian (6,6%) → normal (8,3%), qui s'applique immédiatement.
 
 ### 7.3 Régime indépendant (`fiscal_engine/independant.py`)
 - Seul le régime **micro-entrepreneur** est couvert. Le régime réel
@@ -369,20 +408,20 @@ cd Fiscal-tracker-main   # ou le nom du dossier après extraction
 python3 -m unittest discover -s tests -p "test_*.py" -v
 ```
 Nécessite `duckdb` installé (`pip install duckdb --break-system-packages`)
-pour les tests `test_off_import.py`. **Corriger d'abord l'anomalie de la
-section 3** (déplacement du fichier `.parquet`), sans quoi 15 tests
-échoueront.
+pour les tests `test_off_import.py`, et `tesseract-ocr-fra` installé
+(`apt-get install -y tesseract-ocr-fra`) pour les tests OCR en français,
+notamment `test_qualite.py`.
 
-Au dernier compte avant cette anomalie potentielle : **133 tests, tous
-passants**.
+**Au 2026-07-29 : 143 tests, tous passants (2 skips intentionnels)** —
+voir section 3 pour l'historique des 4 anomalies trouvées et corrigées à
+cette date, dont certaines nécessitent un upload GitHub non encore fait.
 
 ---
 
 ## 10. Pistes de prochaines étapes (non priorisées formellement, au choix)
 
-- Corriger l'anomalie de la section 3 (rapide, à faire en premier).
-- Vérifier officiellement les seuils RFR de la CSG retraite (point 7.2 —
-  le plus important à fiabiliser).
+- ✅ Anomalie parquet corrigée, seuils RFR CSG retraite fiabilisés (voir
+  section 3) — reste à uploader les fichiers correspondants sur GitHub.
 - Tester le vrai téléchargement OFF sur une machine sans restriction
   réseau (point 7.11).
 - Construire une interface utilisateur minimale (au moins en ligne de
@@ -395,11 +434,13 @@ passants**.
 
 ---
 
-## 11. Rappel des chiffres clés (au 28/07/2026)
+## 11. Rappel des chiffres clés (au 29/07/2026)
 
-- **133 tests unitaires**, tous passants (hors anomalie section 3).
+- **143 tests unitaires**, tous passants (2 skips intentionnels — voir
+  section 3 pour l'historique des corrections de cette date).
 - **44 prélèvements** définis en base, **32 catégories produit**, **12
   paramètres de référence** versionnés.
 - **8 mécanismes de calcul génériques** distincts dans le moteur.
-- **~4665 lignes** de code Python au total (hors tests, hors SQL).
+- **~4665 lignes** de code Python au total (hors tests, hors SQL) — hors
+  ajout de `tests/test_retraite.py` (nouveau fichier de tests).
 - **1 pays** couvert (France), architecture prête pour extension.
