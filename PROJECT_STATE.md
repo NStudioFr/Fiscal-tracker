@@ -65,40 +65,44 @@ GPS TomTom évoquée en tout début de conversation), langues cibles FR/EN/ES.
 
 ## 3. ✅ Anomalies résolues (session du 2026-07-29)
 
-Quatre anomalies ont été trouvées et corrigées lors d'une session de
-vérification complète (repo cloné, `PROJECT_STATE.md` lu, suite de tests
-lancée) :
+**Lot 1 (2026-07-29, matin) — confirmé uploadé et vérifié sur GitHub** (repo
+recloné à neuf, 143 tests passants à l'époque) :
 
 1. **Fixture `.parquet` mal placée** (déjà connue avant la session,
    confirmée corrigée par l'utilisateur) : `off_echantillon_synthetique.parquet`
-   est maintenant bien dans `tests/fixtures/` (elle était à la racine sous
-   `fixtures/`). Les 15 tests de `test_off_import.py` passent.
+   est bien dans `tests/fixtures/`. Les 15 tests de `test_off_import.py` passent.
 2. **Import cassé dans `tests/test_fiche_paie_parser.py`** : le test
    importait encore `_normaliser` depuis `ingestion.fiche_paie`, une
    fonction supprimée lors du refactor qui a créé
-   `ingestion/texte_utils.py` (le fichier de test n'avait pas été mis à
-   jour à cette occasion). Corrigé : import de `normaliser` depuis
+   `ingestion/texte_utils.py`. Corrigé : import de `normaliser` depuis
    `ingestion.texte_utils`.
 3. **Fixture manquante `tests/fixtures/fiche_paie_synthetique.png`** :
-   jamais committée (aucune trace dans l'historique git). Régénérée (image
-   de synthèse 1600×900, confiance OCR Tesseract ~91%, niveau "bon", zéro
-   avertissement — vérifié avec la vraie fonction
-   `ingestion.qualite.diagnostiquer_qualite`). Nécessite le pack
-   `tesseract-ocr-fra` (absent par défaut de l'environnement Claude, à
-   installer via `apt-get install -y tesseract-ocr-fra`).
+   jamais committée. Régénérée (image de synthèse 1600×900, confiance OCR
+   Tesseract ~91%, niveau "bon"). Nécessite le pack `tesseract-ocr-fra`
+   (absent par défaut de l'environnement Claude, à installer via
+   `apt-get install -y tesseract-ocr-fra`).
 4. **Seuil RFR erroné pour la CSG retraite à 2 parts** (voir section 7.2) :
-   39886€ (valeur 2025) au lieu de 40604€ (valeur 2026 officielle
-   CNAV) — corrigé dans `seed_data/fr_seed_lot3.sql`, verrouillé par le
-   nouveau fichier `tests/test_retraite.py`.
+   39886€ (valeur 2025) au lieu de 40604€ (valeur 2026 officielle CNAV) —
+   corrigé dans `seed_data/fr_seed_lot3.sql`, verrouillé par
+   `tests/test_retraite.py`.
 
-**Fichiers modifiés/créés localement lors de cette session, à uploader sur
-GitHub** (l'environnement Claude ne peut cloner/lire le repo, pas y
-pousser de commits) :
-- `tests/test_fiche_paie_parser.py` (modifié)
-- `tests/fixtures/fiche_paie_synthetique.png` (nouveau, binaire)
-- `seed_data/fr_seed_lot3.sql` (modifié — seuil 2 parts + commentaires de sourcing)
-- `fiscal_engine/retraite.py` (modifié — docstring de sourcing)
-- `tests/test_retraite.py` (nouveau)
+**Lot 2 (2026-07-29, après-midi) — ⚠️ PAS ENCORE UPLOADÉ sur GitHub** :
+
+5. **Fiabilisation du quotient familial** (voir section 7.1 pour le
+   détail complet) : `fiscal_engine/foyer.py` réécrit pour couvrir garde
+   alternée, invalidité/anciens combattants, plafonds spécifiques
+   "personne seule ayant élevé un enfant" (1079€) et "veuf avec personne à
+   charge" (5625€), et imposition séparée des époux/pacsés. 5 nouveaux
+   paramètres ajoutés dans `seed_data/fr_seed_lot3.sql`. Verrouillé par le
+   nouveau fichier `tests/test_foyer.py` (24 tests). Suite complète passée
+   de 143 à 167 tests.
+
+**Fichiers modifiés/créés localement à uploader sur GitHub pour le lot 2**
+(l'environnement Claude ne peut cloner/lire le repo, pas y pousser de
+commits) :
+- `fiscal_engine/foyer.py` (réécrit)
+- `seed_data/fr_seed_lot3.sql` (modifié — 5 nouveaux paramètres QF)
+- `tests/test_foyer.py` (nouveau)
 - `PROJECT_STATE.md` (ce document, mis à jour)
 
 **⚠️ Si tu commences une nouvelle session sans avoir uploadé ces fichiers**,
@@ -139,11 +143,12 @@ Fiscal-tracker/
 │   └── ticket_caisse.py            — Parser ticket de caisse
 ├── imports/                      — Import de sources de données externes
 │   └── off_import.py              — Import Open Food Facts
-├── tests/                        — 143 tests au total (tous passants,
+├── tests/                        — 167 tests au total (tous passants,
 │                                    2 skips intentionnels — voir section 3)
 │   ├── test_engine.py
 │   ├── test_alcool.py
 │   ├── test_retraite.py            — Vraies données seed (pas de mécanisme générique) : ajouté le 2026-07-29
+│   ├── test_foyer.py               — Idem, pour foyer.py (garde alternée, invalidité...) : ajouté le 2026-07-29
 │   ├── test_fiche_paie_parser.py
 │   ├── test_avis_imposition_parser.py
 │   ├── test_facture_parser.py
@@ -216,19 +221,51 @@ n'importe quelle formule sans modification du schéma.
 ## 7. INDEX COMPLET DES LIMITES, POINTS EN SUSPENS ET TODO
 
 ### 7.1 Fiscalité France — quotient familial / foyer (`fiscal_engine/foyer.py`)
-- Garde alternée non gérée (devrait donner un quart de part par enfant au
-  lieu d'une demi-part).
-- Enfants en situation de handicap, anciens combattants, cartes
-  d'invalidité : demi-parts supplémentaires non gérées.
-- Plafonds spécifiques non gérés : "personne seule ayant élevé un enfant"
-  (1079€), "veuf avec personne à charge" (5625€) — seuls le plafond
-  standard (1807€/demi-part) et le plafond parent isolé 1er enfant (4262€)
-  sont implémentés.
-- Imposition séparée des époux/pacsés non gérée (seul le cas standard
-  d'imposition commune est traité).
-- `revenu_net_imposable` est un paramètre d'entrée supposé déjà net —
-  aucun calcul d'abattement/déduction en amont (pension alimentaire, PER,
-  frais réels...) n'est effectué par ce module.
+- **✅ Fiabilisé le 2026-07-29** — 4 des 5 limites listées ci-dessous sont
+  désormais couvertes, sourcées sur BOFiP (BOI-IR-LIQ-10-20,
+  BOI-IR-LIQ-20-20-20) et service-public.gouv.fr (fiches F2702, F2705,
+  F387, F34088, F35127). Verrouillé par le nouveau fichier
+  `tests/test_foyer.py` (24 tests, sur les vraies données du seed, voir
+  aussi `tests/test_engine.py::TestFoyerFiscal` pour les tests génériques
+  du mécanisme).
+  1. **Garde alternée** : gérée (`nombre_enfants_garde_alternee` sur
+     `SituationFoyer`) — quart de part par enfant (les 2 premiers), demi
+     part à partir du 3e ; plafond spécifique 904€/quart-part (moitié du
+     plafond standard), 2131€ pour le premier enfant si parent isolé en
+     garde alternée exclusivement.
+  2. **Invalidité / ancien combattant** : géré à 2 niveaux —
+     `nombre_demi_parts_invalidite_ancien_combattant` (0 à 2, pour le
+     contribuable et/ou son conjoint eux-mêmes, plafond majoré 3608€
+     chacun) et `nombre_enfants_invalides_a_charge` /
+     `nombre_enfants_invalides_garde_alternee` (personnes à charge
+     titulaires de la CMI invalidité, +0,5 ou +0,25 part en plus de leur
+     part normale d'enfant, plafond standard 1807€/904€).
+  3. **Plafonds spécifiques** : "personne seule ayant élevé un enfant"
+     (`personne_seule_ayant_eleve_enfant`, +0,5 part, plafond 1079€,
+     incompatible avec des enfants à charge actuels — `ValueError` sinon)
+     et "veuf avec personne à charge" (plafond combiné 5625€ pour les 2
+     premières demi-parts d'enfants/personnes invalides à charge — voir
+     limite résiduelle ci-dessous).
+  4. **Imposition séparée** : gérée (`imposition_separee=True` sur
+     `SituationFoyer`, valide seulement avec `situation_familiale` à
+     'marie' ou 'pacse') — traite le déclarant comme 1 part de base même
+     si légalement marié/pacsé.
+- **Limite résiduelle sur le point 3 (veuf)** : le plafond combiné 5625€
+  est appliqué dès qu'il y a AU MOINS une demi-part qualifiante (enfant ou
+  personne invalide à charge), pas seulement à partir de 2 — l'articulation
+  exacte du mécanisme BOFiP (réduction complémentaire de 2011€) pour le cas
+  d'un veuf n'ayant qu'1 seul enfant n'a pas pu être confirmée avec
+  certitude à cette session. Peut légèrement SURESTIMER l'avantage dans ce
+  cas précis à très haut revenu. Voir docstring de `fiscal_engine/foyer.py`
+  pour le détail complet. À vérifier sur BOFiP si ce cas se présente.
+- Point 5, toujours NON couvert (hors périmètre de cette fiabilisation,
+  volontairement) : `revenu_net_imposable` reste un paramètre d'entrée
+  supposé déjà net — aucun calcul d'abattement/déduction en amont (pension
+  alimentaire, PER, frais réels, rattachement d'enfants majeurs...) n'est
+  effectué par ce module.
+- Rattachement d'enfants majeurs, ascendants invalides recueillis : NON
+  gérés (nouvelles limites identifiées lors de cette fiabilisation, à
+  traiter dans une prochaine itération si besoin).
 
 ### 7.2 CSG retraite (`fiscal_engine/retraite.py`)
 - **✅ Fiabilisé le 2026-07-29** : les seuils RFR 2026 sont désormais
@@ -411,7 +448,7 @@ pour les tests `test_off_import.py`, et `tesseract-ocr-fra` installé
 (`apt-get install -y tesseract-ocr-fra`) pour les tests OCR en français,
 notamment `test_qualite.py`.
 
-**Au 2026-07-29 : 143 tests, tous passants (2 skips intentionnels)** —
+**Au 2026-07-29 : 167 tests, tous passants (2 skips intentionnels)** —
 voir section 3 pour l'historique des 4 anomalies trouvées et corrigées à
 cette date, dont certaines nécessitent un upload GitHub non encore fait.
 
@@ -419,8 +456,16 @@ cette date, dont certaines nécessitent un upload GitHub non encore fait.
 
 ## 10. Pistes de prochaines étapes (non priorisées formellement, au choix)
 
-- ✅ Anomalie parquet corrigée, seuils RFR CSG retraite fiabilisés (voir
-  section 3) — reste à uploader les fichiers correspondants sur GitHub.
+- ✅ Anomalie parquet corrigée, seuils RFR CSG retraite fiabilisés, quotient
+  familial/foyer fiabilisé sur 4 des 5 limites connues (voir section 3) —
+  reste à uploader le lot 2 sur GitHub (voir liste en section 3).
+- Ajouter les "grosses catégories" éco-taxes discutées le 2026-07-29 :
+  éco-participation DEEE (électroménager/informatique, barème par famille
+  de produit très granulaire) et rémunération pour copie privée (RCP,
+  barème par capacité de stockage — smartphones, tablettes, disques durs
+  externes, clés USB, cartes mémoire...) — gros chantier, nécessiterait le
+  même travail de sourcing que pour l'alcool/tabac (ecologic-france.com,
+  copiefrance.fr). Idem pour un futur régime réel indépendant, autres pays.
 - Tester le vrai téléchargement OFF sur une machine sans restriction
   réseau (point 7.11).
 - Construire une interface utilisateur minimale (au moins en ligne de
@@ -428,18 +473,19 @@ cette date, dont certaines nécessitent un upload GitHub non encore fait.
   concrètement — actuellement tout est bibliothèque pure.
 - Enrichir le mapping produits/OFF au fil de vrais tickets de caisse
   scannés (tâche de fond continue).
-- Éventuellement : éco-contributions, régime réel indépendant, autres
-  pays — gros chantiers, à n'entamer que si le besoin se confirme.
 
 ---
 
 ## 11. Rappel des chiffres clés (au 29/07/2026)
 
-- **143 tests unitaires**, tous passants (2 skips intentionnels — voir
+- **167 tests unitaires**, tous passants (2 skips intentionnels — voir
   section 3 pour l'historique des corrections de cette date).
-- **44 prélèvements** définis en base, **32 catégories produit**, **12
-  paramètres de référence** versionnés.
+- **44 prélèvements** définis en base, **32 catégories produit**, **17
+  paramètres de référence** versionnés (12 + 5 nouveaux paramètres QF
+  ajoutés le 2026-07-29, voir section 7.1).
 - **8 mécanismes de calcul génériques** distincts dans le moteur.
-- **~4665 lignes** de code Python au total (hors tests, hors SQL) — hors
-  ajout de `tests/test_retraite.py` (nouveau fichier de tests).
+- **~4665 lignes** de code Python au total (hors tests, hors SQL) — ce
+  chiffre n'a pas été recompté après les ajouts du 2026-07-29
+  (`foyer.py` réécrit et étoffé, `test_retraite.py`, `test_foyer.py`
+  nouveaux) : à considérer comme approximatif/daté.
 - **1 pays** couvert (France), architecture prête pour extension.
