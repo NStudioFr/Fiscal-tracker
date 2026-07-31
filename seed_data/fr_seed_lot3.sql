@@ -168,6 +168,45 @@ INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, vale
 SELECT id, '2026-01-01', NULL, 0.4525, 'Art. 197 CGI — LégiFiscal (BOFiP 07/04/2026) et Meilleurtaux Placement, revenus 2025'
 FROM parametre_reference WHERE code = 'DECOTE_TAUX';
 
+-- Paramètres ajoutés le 2026-07-29 pour fiabiliser fiscal_engine/foyer.py
+-- (garde alternée, invalidité/anciens combattants, plafonds spécifiques).
+-- Sourcés sur BOFiP (BOI-IR-LIQ-20-20-20) et service-public.gouv.fr
+-- (fiches F2702, F2705, F387, F34088, F35127), vérifiés le 2026-07-29.
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PLAFOND_QF_QUART_PART', 'Plafond de l''avantage du quotient familial par quart de part supplémentaire (garde alternée)', 'Family quotient benefit cap per additional quarter-share (shared custody)', 'Techo de la ventaja del cociente familiar por cuarto de parte adicional (custodia compartida)');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PLAFOND_QF_PARENT_ISOLE_1ER_ENFANT_GARDE_ALTERNEE', 'Plafond de l''avantage du quotient familial pour la part de parent isolé, 1er enfant en garde alternée', 'Family quotient benefit cap for single-parent share, first child in shared custody', 'Techo de la ventaja del cociente familiar para el padre/madre soltero/a, primer hijo en custodia compartida');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PLAFOND_QF_INVALIDITE_ANCIEN_COMBATTANT', 'Plafond de l''avantage du quotient familial pour la demi-part invalidité/ancien combattant du contribuable ou du conjoint', 'Family quotient benefit cap for the taxpayer''s or spouse''s own disability/veteran half-share', 'Techo de la ventaja del cociente familiar por la media parte de invalidez/excombatiente del contribuyente o cónyuge');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PLAFOND_QF_PERSONNE_SEULE_AYANT_ELEVE_ENFANT', 'Plafond de l''avantage du quotient familial pour une personne seule ayant élevé seule un enfant (sans charge actuelle)', 'Family quotient benefit cap for a single person who raised a child alone in the past (no current dependent)', 'Techo de la ventaja del cociente familiar para una persona sola que crió un hijo en el pasado (sin cargo actual)');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PLAFOND_QF_VEUF_AVEC_CHARGE', 'Plafond combiné de l''avantage du quotient familial pour un veuf/veuve avec personne à charge (2 premières demi-parts)', 'Combined family quotient benefit cap for a widow(er) with a dependent (first two half-shares)', 'Techo combinado de la ventaja del cociente familiar para un viudo/a con persona a cargo (2 primeras medias partes)');
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 904.0, 'Art. 197 CGI — moitié du plafond standard 1807€/2, BOI-IR-LIQ-20-20-20 (garde alternée), revenus 2025'
+FROM parametre_reference WHERE code = 'PLAFOND_QF_QUART_PART';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 2131.0, 'Art. 197 CGI — moitié du plafond parent isolé standard 4262€/2, BOI-IR-LIQ-20-20-20 (garde alternée), revenus 2025'
+FROM parametre_reference WHERE code = 'PLAFOND_QF_PARENT_ISOLE_1ER_ENFANT_GARDE_ALTERNEE';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 3608.0, 'Art. 195 CGI — service-public.gouv.fr fiche F2702 (1807€ standard + 1801€ de réduction complémentaire), revenus 2025'
+FROM parametre_reference WHERE code = 'PLAFOND_QF_INVALIDITE_ANCIEN_COMBATTANT';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 1079.0, 'Art. 195 1-d CGI — service-public.gouv.fr, revenus 2025 (valeur convergente entre sources indépendantes)'
+FROM parametre_reference WHERE code = 'PLAFOND_QF_PERSONNE_SEULE_AYANT_ELEVE_ENFANT';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 5625.0, 'Art. 195 CGI — BOFiP (réduction d''impôt complémentaire pour veuf ayant charge, 3614€+2011€=5625€) et service-public.gouv.fr fiche F35127, revenus 2025. Voir docstring fiscal_engine/foyer.py pour la limite documentée sur ce plafond.'
+FROM parametre_reference WHERE code = 'PLAFOND_QF_VEUF_AVEC_CHARGE';
+
 -- =========================================================================
 -- CSG / CRDS sur salaire
 -- =========================================================================
