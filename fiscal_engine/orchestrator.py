@@ -8,12 +8,80 @@ Deux cas de figure, cf. docs/architecture.md :
      explicitement (ligne_document.prelevement_id renseigné) et son montant
      est déjà connu (lu directement sur le document) — pas de calcul à faire,
      juste un enregistrement pour la traçabilité et les rapports.
+
+FIABILISÉ le 2026-07-29 (PROJECT_STATE.md section 7.5) : cette
+orchestration sait désormais gérer les règles de type
+'montant_par_unite_a_seuil' (ex : les 2 taxes sur les boissons
+sucrées/édulcorées) quand elles sont rattachées à une catégorie de produit
+dans `categorie_prelevement` — auparavant elles ne l'étaient pas du tout
+car ce type de règle a besoin d'une donnée PAR PRODUIT (`valeur_seuil`,
+ex : teneur en sucre), pas seulement de la catégorie. Voir
+`_resoudre_valeur_seuil_produit` ci-dessous pour le détail et ses limites
+(la donnée n'est pas toujours disponible, auquel cas ce prélevement précis
+est silencieusement absent du résultat pour cette ligne — voir
+PROJECT_STATE.md pour la liste des cas gérés/non gérés).
 """
 
 import sqlite3
 
 from .calculator import calculer_montant
 from .resolver import resoudre_regle
+
+
+def _resoudre_valeur_seuil_produit(
+    conn: sqlite3.Connection, ligne: sqlite3.Row, prelevement_id: int
+) -> float | None:
+    """Pour une règle de type 'montant_par_unite_a_seuil', retrouve la
+    valeur_seuil à partir des données du produit identifié sur la ligne
+    (`produit_reference`, via `ligne_document.produit_reference_id`), quand
+    c'est possible.
+
+    Renvoie None si la donnée n'est pas disponible — l'appelant doit alors
+    ne PAS calculer ce prélèvement pour cette ligne plutôt que de deviner
+    une valeur.
+
+    Ad-hoc et volontairement limité aux 2 taxes sur les boissons
+    sucrées/édulcorées (les seules de ce type à ce jour) plutôt qu'un
+    mécanisme générique — à généraliser si d'autres taxes de ce type
+    apparaissent (voir PROJECT_STATE.md section 7.5).
+    """
+    if ligne["produit_reference_id"] is None:
+        return None
+    produit = conn.execute(
+        "SELECT * FROM produit_reference WHERE id = ?", (ligne["produit_reference_id"],)
+    ).fetchone()
+    if produit is None:
+        return None
+
+    code_prelevement = conn.execute(
+        "SELECT code FROM prelevement WHERE id = ?", (prelevement_id,)
+    ).fetchone()["code"]
+
+    if code_prelevement == "TAXE_BOISSONS_SUCRE":
+        # teneur_sucre_100g (champ OFF 'sugars_100g', en g/100g ou g/100mL)
+        # est utilisé DIRECTEMENT comme kg de sucres ajoutés par hectolitre
+        # (même valeur numérique : 100mL x 1000 = 1hL) — approximation déjà
+        # documentée dans imports/off_import.py. Peut être None (produit
+        # sans donnée nutritionnelle connue) : dans ce cas on renvoie bien
+        # None, l'appelant doit alors s'abstenir de calculer.
+        return produit["teneur_sucre_100g"]
+
+    if code_prelevement == "TAXE_BOISSONS_EDULCORANT":
+        # LIMITE CONNUE (PROJECT_STATE.md section 7.5) : OFF ne fournit que
+        # la PRÉSENCE d'un édulcorant de synthèse (contient_edulcorants),
+        # jamais sa CONCENTRATION en mg/L — pourtant nécessaire pour choisir
+        # la bonne tranche du barème (seuil à 120mg/L). Impossible de
+        # déterminer valeur_seuil à partir des seules données OFF
+        # aujourd'hui, même quand contient_edulcorants=1 : ce prélèvement
+        # n'est donc JAMAIS calculé automatiquement par ce module. Un
+        # utilisateur redevable de cette contribution doit la vérifier
+        # manuellement.
+        return None
+
+    # Autre règle 'montant_par_unite_a_seuil' non prévue par ce code ad-hoc :
+    # on ne devine rien, il faudra étendre cette fonction si un nouveau cas
+    # apparaît.
+    return None
 
 
 def traiter_ligne_document(conn: sqlite3.Connection, ligne_document_id: int, date_reference: str) -> list[int]:
@@ -72,6 +140,21 @@ def traiter_ligne_document(conn: sqlite3.Connection, ligne_document_id: int, dat
                 "SELECT pays_code FROM prelevement WHERE id = ?", (prelevement_id,)
             ).fetchone()["pays_code"]
             regle = resoudre_regle(conn, prelevement_id, date_reference)
+
+            valeur_seuil = None
+            if regle["type_regle"] == "montant_par_unite_a_seuil":
+                valeur_seuil = _resoudre_valeur_seuil_produit(conn, ligne, prelevement_id)
+                if valeur_seuil is None:
+                    # Donnée produit manquante (pas de produit identifié sur
+                    # la ligne, ou champ nutritionnel requis absent/non
+                    # calculable — voir _resoudre_valeur_seuil_produit) : on
+                    # ne peut pas deviner un montant, donc CE prélèvement
+                    # précis n'est pas calculé pour cette ligne. Ce n'est pas
+                    # une erreur : les autres prélèvements de la ligne (ex :
+                    # TVA) sont bien calculés normalement, voir la suite de
+                    # la boucle.
+                    continue
+
             resultat = calculer_montant(
                 conn,
                 regle,
@@ -80,6 +163,7 @@ def traiter_ligne_document(conn: sqlite3.Connection, ligne_document_id: int, dat
                 unite_quantite=ligne["unite_quantite"],
                 date_reference=date_reference,
                 pays_code=pays_code,
+                valeur_seuil=valeur_seuil,
             )
             id_insere = _enregistrer(
                 conn,
