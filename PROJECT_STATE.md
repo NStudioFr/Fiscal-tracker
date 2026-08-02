@@ -86,7 +86,8 @@ recloné à neuf, 143 tests passants à l'époque) :
    corrigé dans `seed_data/fr_seed_lot3.sql`, verrouillé par
    `tests/test_retraite.py`.
 
-**Lot 2 (2026-07-29, après-midi) — ⚠️ PAS ENCORE UPLOADÉ sur GitHub** :
+**Lot 2 (2026-07-29, après-midi) — confirmé uploadé et vérifié sur GitHub**
+(repo recloné à neuf, 167 tests passants à l'époque) :
 
 5. **Fiabilisation du quotient familial** (voir section 7.1 pour le
    détail complet) : `fiscal_engine/foyer.py` réécrit pour couvrir garde
@@ -97,12 +98,73 @@ recloné à neuf, 143 tests passants à l'époque) :
    nouveau fichier `tests/test_foyer.py` (24 tests). Suite complète passée
    de 143 à 167 tests.
 
-**Fichiers modifiés/créés localement à uploader sur GitHub pour le lot 2**
-(l'environnement Claude ne peut cloner/lire le repo, pas y pousser de
-commits) :
-- `fiscal_engine/foyer.py` (réécrit)
-- `seed_data/fr_seed_lot3.sql` (modifié — 5 nouveaux paramètres QF)
-- `tests/test_foyer.py` (nouveau)
+**Lot 3 (2026-07-29, soir) — ⚠️ PAS ENCORE UPLOADÉ sur GitHub** :
+
+6. **Fiabilisation de la taxe soda** (voir section 7.5 pour le détail
+   complet) : les tarifs 2026 étaient déjà exacts (vérifiés par lecture
+   directe de BOFiP BOI-BAREME-000038), le vrai trou était structurel —
+   `BOISSONS_SUCREES` n'était relié à aucune des deux taxes dans
+   `categorie_prelevement`, ET `fiscal_engine/orchestrator.py` n'avait
+   aucun mécanisme pour résoudre `valeur_seuil` depuis un produit identifié
+   (`produit_reference`). Les deux sont corrigés : le rattachement est
+   ajouté dans `seed_data/fr_categories_produits.sql`, et l'orchestrateur
+   sait désormais résoudre `teneur_sucre_100g` automatiquement pour
+   `TAXE_BOISSONS_SUCRE`. `TAXE_BOISSONS_EDULCORANT` reste volontairement
+   jamais calculée automatiquement (limite de données OFF, pas de bug).
+   Verrouillé par le nouveau fichier `tests/test_taxe_soda.py` (7 tests).
+   Suite complète passée de 167 à 174 tests.
+
+**Lot 4 (2026-07-29, soir, suite) — ⚠️ PAS ENCORE UPLOADÉ sur GitHub** :
+
+7. **Fiabilisation de l'alcool** (voir section 7.6 pour le détail complet) :
+   les 4 points listés (rhums DOM, petites brasseries, VDN/VDL AOP, taxe
+   prémix) sont désormais couverts, sourcés sur douane.gouv.fr et
+   Légifrance (art. 1613 bis CGI), tous deux lus directement. 6 nouveaux
+   prélèvements ajoutés dans `seed_data/fr_seed_lot3.sql`,
+   `fiscal_engine/alcool.py` étendu (2 nouveaux paramètres optionnels sur
+   les fonctions existantes, 2 nouvelles fonctions). Verrouillé par 14
+   nouveaux tests dans `tests/test_alcool.py` (24 tests au total dans ce
+   fichier). Suite complète passée de 174 à 188 tests.
+
+**Lot 5 (2026-07-29, soir, suite) — ⚠️ PAS ENCORE UPLOADÉ sur GitHub** :
+
+8. **Fiabilisation du tabac** (voir section 7.7 pour le détail complet) :
+   paramètres de l'accise revérifiés par lecture directe de douane.gouv.fr
+   — tous exacts (les 2 exemples chiffrés officiels sont désormais
+   verrouillés par des tests). Le risque "tarifs changés en cours d'année"
+   précédemment signalé est clarifié : ce sont les prix par référence qui
+   changent souvent, pas les paramètres de l'accise. 2 catégories fiscales
+   manquantes trouvées et ajoutées (narguilé/blunts, autres tabacs à
+   chauffer). Nouveau fichier `tests/test_tabac.py` (7 tests). Suite
+   complète passée de 188 à 195 tests.
+
+**Lot 6 (2026-07-29, soir, fin) — ⚠️ PAS ENCORE UPLOADÉ sur GitHub** :
+
+9. **Fiabilisation du régime indépendant** (voir section 7.3 pour le
+   détail complet) : CIPAV (23,2%, nouveau `type_activite='bnc_cipav'`),
+   plafonds de CA du régime micro (203 100€/83 600€, +7,6% loi de finances
+   2026), et éligibilité au versement libératoire (seuil RFR N-2
+   proportionnel au nombre de parts, 29 315€/part). Sourcé sur
+   urssaf.fr/autoentrepreneur.urssaf.fr/economie.gouv.fr. Nouveau fichier
+   `tests/test_independant.py` (16 tests). Suite complète passée de 195 à
+   211 tests. **Ceci clôt le plan de fiabilisation en 4 points validé le
+   2026-07-29 (7.5 → 7.6 → 7.7 → 7.3, tous faits).**
+
+**Fichiers modifiés/créés localement à uploader sur GitHub pour les lots 3
+à 6** (l'environnement Claude ne peut cloner/lire le repo, pas y pousser de
+commits — ces lots n'ont pas encore été vérifiés par un reclonage depuis la
+dernière confirmation d'upload, lot 2) :
+- `fiscal_engine/orchestrator.py` (modifié — résolution de valeur_seuil)
+- `fiscal_engine/alcool.py` (modifié — 4 nouveaux points gérés)
+- `fiscal_engine/independant.py` (modifié — CIPAV, plafonds CA, éligibilité VL)
+- `seed_data/fr_categories_produits.sql` (modifié — rattachement taxe soda)
+- `seed_data/fr_seed_lot3.sql` (modifié — commentaires taxe soda + 6
+  nouveaux prélèvements alcool + 2 nouvelles catégories tabac + CIPAV +
+  plafonds CA + seuil RFR versement libératoire)
+- `tests/test_taxe_soda.py` (nouveau)
+- `tests/test_alcool.py` (modifié — 14 nouveaux tests)
+- `tests/test_tabac.py` (nouveau)
+- `tests/test_independant.py` (nouveau)
 - `PROJECT_STATE.md` (ce document, mis à jour)
 
 **⚠️ Si tu commences une nouvelle session sans avoir uploadé ces fichiers**,
@@ -143,12 +205,13 @@ Fiscal-tracker/
 │   └── ticket_caisse.py            — Parser ticket de caisse
 ├── imports/                      — Import de sources de données externes
 │   └── off_import.py              — Import Open Food Facts
-├── tests/                        — 167 tests au total (tous passants,
+├── tests/                        — 211 tests au total (tous passants,
 │                                    2 skips intentionnels — voir section 3)
 │   ├── test_engine.py
 │   ├── test_alcool.py
 │   ├── test_retraite.py            — Vraies données seed (pas de mécanisme générique) : ajouté le 2026-07-29
 │   ├── test_foyer.py               — Idem, pour foyer.py (garde alternée, invalidité...) : ajouté le 2026-07-29
+│   ├── test_taxe_soda.py           — Idem, orchestrateur + taxe soda : ajouté le 2026-07-29
 │   ├── test_fiche_paie_parser.py
 │   ├── test_avis_imposition_parser.py
 │   ├── test_facture_parser.py
@@ -295,16 +358,36 @@ n'importe quelle formule sans modification du schéma.
   médian (6,6%) → normal (8,3%), qui s'applique immédiatement.
 
 ### 7.3 Régime indépendant (`fiscal_engine/independant.py`)
-- Seul le régime **micro-entrepreneur** est couvert. Le régime réel
-  (BIC/BNC au réel) est un système comptable complet, explicitement hors
-  périmètre.
-- Taux CIPAV (professions libérales relevant de la CIPAV plutôt que du
-  régime général) non modélisé séparément — utiliser le code `'bnc'`
-  sous-estime légèrement leurs cotisations réelles.
-- Non gérés : location de meublés de tourisme classés (taux à 6%), ACRE,
-  plafonds de chiffre d'affaires du régime micro, vérification
-  d'éligibilité au versement libératoire (condition de revenu fiscal de
-  référence).
+- **✅ Fiabilisé le 2026-07-29** — 3 des 4 points ci-dessous couverts,
+  sourcés sur urssaf.fr / autoentrepreneur.urssaf.fr / economie.gouv.fr
+  (dont 2 pages officielles lues directement) et recoupement de 5+ sources
+  indépendantes pour le seuil RFR. Verrouillé par le nouveau fichier
+  `tests/test_independant.py` (16 tests).
+  1. **CIPAV** : `type_activite='bnc_cipav'` donne le bon taux (23,2% pour
+     2026, vs 25,6% pour le BNC régime général — vérifié aussi que ce
+     dernier taux, déjà présent, était bien exact malgré une trajectoire de
+     hausse initialement prévue plus élevée, révisée par décret du
+     08/09/2025). Le versement libératoire et l'abattement forfaitaire
+     restent identiques au BNC régime général pour la CIPAV (seule la
+     cotisation sociale diffère).
+  2. **Plafonds de chiffre d'affaires du régime micro** : nouvelle fonction
+     `verifier_plafond_ca_micro` — 203 100€ (vente/hébergement) / 83 600€
+     (services BIC/BNC/CIPAV), valeurs 2026-2028 revalorisées de +7,6% par
+     la loi de finances 2026. Gère aussi le sous-plafond services en cas
+     d'activité mixte. Limite résiduelle : ne vérifie qu'une seule année
+     civile, pas la mécanique de sortie après 2 années consécutives de
+     dépassement (pas d'historique disponible).
+  3. **Éligibilité au versement libératoire** : nouvelle fonction
+     `verifier_eligibilite_versement_liberatoire` — seuil RFR N-2 de
+     29 315€ pour 1 part (2026), qui s'avère être une simple règle
+     PROPORTIONNELLE au nombre de parts du foyer (vérifié sur 4 exemples
+     officiels différents : 1/2/2,5/3 parts). Ne vérifie pas que le RFR
+     fourni est bien celui de la bonne année (N-2) — à la charge de
+     l'appelant.
+- **Non couvert (hors périmètre de cette fiabilisation)** : le régime réel
+  (BIC/BNC au réel) reste un système comptable complet explicitement hors
+  périmètre. Location de meublés de tourisme classés (taux à 6%) et ACRE
+  (réduction de cotisations 1ère année) : toujours non gérés.
 
 ### 7.4 TICPE / TICGN
 - Majoration régionale de la TICPE non gérée (chaque région peut moduler
@@ -312,38 +395,90 @@ n'importe quelle formule sans modification du schéma.
   s'applique.
 
 ### 7.5 Taxe soda (`TAXE_BOISSONS_SUCRE` / `TAXE_BOISSONS_EDULCORANT`)
-- Le calcul est exact (sourcé BOFiP officiellement, mécanisme
-  `montant_par_unite_a_seuil` validé), MAIS il nécessite la teneur en
-  sucre par produit — disponible via OFF (`teneur_sucre_100g`), mais
-  utilisée comme approximation (OFF ne distingue pas sucres ajoutés vs
-  naturellement présents).
-- `contient_edulcorants` (issu d'OFF) ne détecte que la PRÉSENCE d'un
-  édulcorant, pas sa CONCENTRATION en mg/L — donc la contribution sur les
-  édulcorants ne peut pas être calculée avec certitude à partir des seules
-  données OFF (seul un "risque probable" est identifiable).
-- Le mapping catégorie produit `BOISSONS_SUCREES` n'est PAS relié
-  automatiquement à ces deux prélèvements dans
-  `categorie_prelevement` — le calcul doit être déclenché explicitement
-  avec la donnée produit (via `produit_reference`), pas via le mapping
-  générique par catégorie.
+- **✅ Fiabilisé le 2026-07-29** : tarifs 2026 vérifiés par lecture directe
+  de la page BOFiP BOI-BAREME-000038 (mise à jour du 24/12/2025) — 4,07€ /
+  21,38€ / 35,63€ par hL pour le sucre (0-5 / 5-8 / >8 kg/hL) et 4,50€ /
+  6,00€ par hL pour l'édulcorant (≤120 / >120 mg/L), tous confirmés exacts.
+- **Rattachement produit → taxe désormais opérationnel** (c'était le vrai
+  trou avant cette date, pas les tarifs) : `BOISSONS_SUCREES` est
+  maintenant relié aux deux prélèvements dans `categorie_prelevement`
+  (`seed_data/fr_categories_produits.sql`), et
+  `fiscal_engine/orchestrator.py` sait résoudre `valeur_seuil` depuis
+  `produit_reference.teneur_sucre_100g` (via
+  `ligne_document.produit_reference_id`) pour calculer automatiquement
+  `TAXE_BOISSONS_SUCRE` sur une ligne d'achat identifiée à un produit connu
+  (typiquement importé via OFF). Verrouillé par le nouveau fichier
+  `tests/test_taxe_soda.py` (7 tests, sur les vraies données du seed).
+- **`TAXE_BOISSONS_EDULCORANT` reste JAMAIS calculée automatiquement**
+  (limite non résolue, comportement volontaire et testé) : OFF ne fournit
+  que la PRÉSENCE d'un édulcorant (`contient_edulcorants`), jamais sa
+  CONCENTRATION en mg/L pourtant nécessaire pour choisir la bonne tranche
+  du barème. Le rattachement `categorie_prelevement` existe (prêt si une
+  source de données fournit un jour la concentration), mais
+  `orchestrator.py::_resoudre_valeur_seuil_produit` renvoie toujours `None`
+  pour cette taxe précise, donc elle est silencieusement absente du
+  résultat — pas de montant inventé. Un utilisateur redevable de cette
+  contribution doit la vérifier manuellement.
+- Comportement à connaître pour une future interface utilisateur : quand
+  `TAXE_BOISSONS_SUCRE` ne peut pas être calculée (produit non identifié,
+  ou identifié mais sans donnée de teneur en sucre), l'orchestrateur ne
+  lève PAS d'exception et ne bloque pas le reste de la ligne (la TVA, par
+  exemple, est toujours calculée normalement) — mais rien ne signale
+  aujourd'hui à l'utilisateur final que cette taxe précise est absente du
+  résultat. Une interface devra le faire explicitement.
 
 ### 7.6 Alcool (`fiscal_engine/alcool.py`)
-- Rhums des DOM (tarif spécifique 966,75€/hlap, distinct du tarif "autres
-  alcools" 1932,42€/hlap) non géré séparément.
-- Taux réduit "petites brasseries" (≤200 000 hL/an) non géré.
-- Taxe "prémix" non gérée.
-- Taux réduit à 40% de la cotisation sécu pour les VDN/VDL AOP non géré.
+- **✅ Fiabilisé le 2026-07-29** — les 4 points ci-dessous sont désormais
+  gérés via de nouveaux paramètres optionnels et 2 nouvelles fonctions,
+  sourcés sur douane.gouv.fr (lecture directe) et Légifrance (article 1613
+  bis CGI, lecture directe). Verrouillé par 14 nouveaux tests ajoutés à
+  `tests/test_alcool.py` (24 tests au total dans ce fichier).
+  - **Rhums des DOM** : `calculer_droit_spiritueux(..., rhum_dom=True)`
+    applique 966,75€/hlap au lieu de 1932,42€/hlap. Limite résiduelle : le
+    contingent annuel (153 000 hlap au niveau national, réparti par
+    distillerie — au-delà, une "soulte" de 304,90€/hlap s'ajoute) n'est PAS
+    vérifié, le tarif réduit est toujours appliqué.
+  - **Petites brasseries indépendantes** (≤200 000 hL/an) :
+    `calculer_droit_biere(..., petite_brasserie_independante=True)`
+    applique le tarif "léger" (4,12€/hL·degré) même au-delà de 2,8% vol.
+  - **VDN/VDL AOP** : nouvelle fonction
+    `calculer_droit_produit_intermediaire(..., vdn_vdl_aop=True)` — accise
+    réduite (52,39€/hL au lieu de 209,53€/hL) et, si degré > 18%,
+    cotisation sécu réduite ET sur une base différente (20,97€/hL de
+    PRODUIT FINI, pas d'alcool pur). Limite résiduelle : la cotisation sécu
+    des "autres produits intermédiaires" (non AOP) titrant plus de 18% vol.
+    n'est pas gérée (cas rare).
+  - **Taxe prémix** : nouvelle fonction `calculer_taxe_premix(...)` — 2
+    tarifs selon catégorie (3000€/hlap "vin/fermenté" vs 11000€/hlap
+    "autre", valeur par défaut). Limite résiduelle : la fonction ne
+    détermine PAS elle-même si un produit relève légalement de la
+    définition du prémix (Art. 1613 bis I CGI) — à la charge de l'appelant.
 
 ### 7.7 Tabac
-- Modélisation validée à l'euro près sur les 2 exemples chiffrés
-  officiels de douane.gouv.fr, MAIS le prix de vente au détail est fixé
-  par arrêté ministériel **par référence/marque** — le moteur calcule
+- **✅ Fiabilisé le 2026-07-29** : paramètres de l'accise (taux/tarif/
+  minimum de perception) revérifiés par lecture directe de la page
+  douane.gouv.fr "La fiscalité appliquée aux tabacs manufacturés..." (mise
+  à jour du 05/01/2026) — tous exacts, y compris les 2 exemples chiffrés
+  officiels (paquet 11,50€ → accise 7,791€ ; paquet 13,50€ → accise
+  8,891€), désormais verrouillés dans `tests/test_tabac.py`.
+- **Clarification sur le risque "tarifs changés en cours d'année" (levée)**
+  : ce qui change plusieurs fois par an (6 arrêtés d'homologation prévus en
+  2026, dont un au 1er juin) ce sont les PRIX DE VENTE AU DÉTAIL par
+  référence/marque commerciale — PAS les paramètres de l'accise
+  (taux/tarif/minimum) eux-mêmes, qui restent stables pour toute l'année
+  2026 sauf modification explicite de l'article L.314-24 CIBS. Le moteur
+  prend le prix de vente en INPUT (lu sur le ticket), donc n'a jamais eu
+  besoin de connaître le prix par référence — seuls les paramètres de
+  l'accise doivent rester à jour, ce qui est confirmé le cas.
+- **2 catégories fiscales manquantes trouvées et ajoutées** (absentes du
+  seed initial, repérées en comparant ligne à ligne avec le tableau
+  officiel) : "autres tabacs à fumer ou à inhaler après avoir été
+  chauffés" (narguilé, blunts...) et "autres tabacs à chauffer" (hors
+  bâtonnets).
+- Limite residuelle inchangée : le prix de vente au détail est fixé par
+  arrêté ministériel par référence/marque — le moteur calcule
   correctement l'accise SI on lui donne le prix payé (lisible sur un
   ticket), mais ne peut pas vérifier ou prédire ce prix lui-même.
-- Douane.gouv.fr indique que les tarifs peuvent être révisés plusieurs
-  fois par an (ex : arrêtés de février ET avril 2026 mentionnés dans une
-  recherche) — **vérifier la date de la dernière mise à jour avant tout
-  usage critique**.
 
 ### 7.8 Éco-contributions (DEEE, textile, mobilier...)
 - **Non traitées du tout.** Réelles, mais gérées par des éco-organismes
@@ -448,7 +583,7 @@ pour les tests `test_off_import.py`, et `tesseract-ocr-fra` installé
 (`apt-get install -y tesseract-ocr-fra`) pour les tests OCR en français,
 notamment `test_qualite.py`.
 
-**Au 2026-07-29 : 167 tests, tous passants (2 skips intentionnels)** —
+**Au 2026-07-29 : 211 tests, tous passants (2 skips intentionnels)** —
 voir section 3 pour l'historique des 4 anomalies trouvées et corrigées à
 cette date, dont certaines nécessitent un upload GitHub non encore fait.
 
@@ -457,8 +592,12 @@ cette date, dont certaines nécessitent un upload GitHub non encore fait.
 ## 10. Pistes de prochaines étapes (non priorisées formellement, au choix)
 
 - ✅ Anomalie parquet corrigée, seuils RFR CSG retraite fiabilisés, quotient
-  familial/foyer fiabilisé sur 4 des 5 limites connues (voir section 3) —
-  reste à uploader le lot 2 sur GitHub (voir liste en section 3).
+  familial/foyer fiabilisé sur 4 des 5 limites connues, taxe soda, alcool,
+  tabac et régime indépendant fiabilisés (voir section 3) — reste à
+  uploader les lots 3 à 6 sur GitHub (voir liste en section 3).
+- **✅ Plan de fiabilisation du 2026-07-29 entièrement terminé** : 7.5 → 7.6
+  → 7.7 → 7.3, les 4 étapes sont faites. Prochaines pistes non priorisées
+  formellement (au choix, aucun plan validé pour la suite) :
 - Ajouter les "grosses catégories" éco-taxes discutées le 2026-07-29 :
   éco-participation DEEE (électroménager/informatique, barème par famille
   de produit très granulaire) et rémunération pour copie privée (RCP,
@@ -478,7 +617,7 @@ cette date, dont certaines nécessitent un upload GitHub non encore fait.
 
 ## 11. Rappel des chiffres clés (au 29/07/2026)
 
-- **167 tests unitaires**, tous passants (2 skips intentionnels — voir
+- **211 tests unitaires**, tous passants (2 skips intentionnels — voir
   section 3 pour l'historique des corrections de cette date).
 - **44 prélèvements** définis en base, **32 catégories produit**, **17
   paramètres de référence** versionnés (12 + 5 nouveaux paramètres QF
