@@ -186,6 +186,31 @@ WHERE cp.code IN ('BOISSONS_SUCREES', 'BOISSONS_ALCOOLISEES', 'ALIMENTATION_ANIM
                    'PRODUITS_ENTRETIEN_MENAGER', 'PRODUITS_HYGIENE_BEAUTE', 'JOUETS', 'FOURNITURES_SCOLAIRES')
   AND p.code = 'TVA_NORMAL';
 
+-- Rattachement des 2 taxes soda (voir seed_data/fr_seed_lot3.sql pour leur
+-- définition) à BOISSONS_SUCREES — AJOUTÉ le 2026-07-29, fiabilisation
+-- section 7.5 de PROJECT_STATE.md. Ce rattachement était volontairement
+-- absent jusqu'ici car ces 2 taxes sont de type 'montant_par_unite_a_seuil'
+-- : leur calcul a besoin d'une donnée PAR PRODUIT (teneur en sucre ou en
+-- édulcorant), pas seulement de la catégorie. fiscal_engine/orchestrator.py
+-- sait désormais résoudre cette donnée depuis produit_reference (via
+-- ligne_document.produit_reference_id) quand elle est disponible :
+--   - TAXE_BOISSONS_SUCRE : calculée automatiquement SI la ligne est liée à
+--     un produit_reference avec teneur_sucre_100g renseigné (typiquement
+--     via l'import Open Food Facts). Sinon, ce prélèvement précis est
+--     silencieusement absent du résultat pour cette ligne (pas d'erreur,
+--     pas de montant inventé) — les autres prélèvements de la ligne (TVA)
+--     sont calculés normalement.
+--   - TAXE_BOISSONS_EDULCORANT : rattachée ici pour la cohérence
+--     architecturale et pour être prête si une source de données fournit un
+--     jour la concentration en mg/L, MAIS N'EST JAMAIS CALCULÉE
+--     AUTOMATIQUEMENT aujourd'hui : OFF ne fournit que la PRÉSENCE d'un
+--     édulcorant (contient_edulcorants), pas sa concentration, qui est
+--     pourtant nécessaire pour choisir la bonne tranche du barème (seuil à
+--     120mg/L). Voir fiscal_engine/orchestrator.py::_resoudre_valeur_seuil_produit.
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p
+WHERE cp.code = 'BOISSONS_SUCREES' AND p.code IN ('TAXE_BOISSONS_SUCRE', 'TAXE_BOISSONS_EDULCORANT');
+
 -- =========================================================================
 -- Fin du mapping produits par catégories
 -- =========================================================================
