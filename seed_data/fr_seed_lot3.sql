@@ -473,10 +473,10 @@ WHERE cp.code = 'GAZ_NATUREL_CHAUFFAGE' AND p.code = 'TICGN';
 -- =========================================================================
 -- Régime micro-entrepreneur (auto-entrepreneur) — voir fiscal_engine/independant.py
 -- =========================================================================
--- Périmètre : 3 catégories d'activité (vente, services BIC, BNC régime
--- général). Le taux CIPAV, la location de meublés de tourisme classés,
--- l'ACRE, et le régime réel ne sont PAS couverts (voir limites détaillées
--- dans independant.py).
+-- Périmètre : 4 catégories d'activité (vente, services BIC, BNC régime
+-- général, BNC CIPAV — ajoutée le 2026-07-29, PROJECT_STATE.md section
+-- 7.3). La location de meublés de tourisme classés, l'ACRE, et le régime
+-- réel ne sont PAS couverts (voir limites détaillées dans independant.py).
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
 SELECT 'FR', id, 'MICRO_COTIS_VENTE', 'Cotisations sociales micro-entrepreneur (vente de marchandises)', 'Micro-entrepreneur social contributions (sale of goods)', 'Cotizaciones sociales de microempresario (venta de mercancías)',
        'Chiffre d''affaires encaissé sur la période déclarée', 'Décret n°2024-484 du 30/05/2024, taux 2026'
@@ -489,7 +489,12 @@ FROM typologie_prelevement WHERE code = 'COTIS_SOC';
 
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
 SELECT 'FR', id, 'MICRO_COTIS_BNC', 'Cotisations sociales micro-entrepreneur (professions libérales BNC, régime général)', 'Micro-entrepreneur social contributions (BNC, general scheme)', 'Cotizaciones sociales de microempresario (BNC, régimen general)',
-       'Chiffre d''affaires encaissé sur la période déclarée. Ne couvre PAS le taux spécifique CIPAV.', 'Décret n°2024-484 du 30/05/2024, taux 2026'
+       'Chiffre d''affaires encaissé sur la période déclarée', 'Décret n°2025-943 du 08/09/2025, taux 2026'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'MICRO_COTIS_CIPAV', 'Cotisations sociales micro-entrepreneur (professions libérales réglementées relevant de la CIPAV : architectes, psychologues, ingénieurs-conseils...)', 'Micro-entrepreneur social contributions (regulated professions under CIPAV : architects, psychologists, consulting engineers...)', 'Cotizaciones sociales de microempresario (profesiones liberales reguladas afiliadas a la CIPAV: arquitectos, psicólogos, ingenieros consultores...)',
+       'Chiffre d''affaires encaissé sur la période déclarée. Le versement libératoire et l''abattement forfaitaire sont identiques au régime BNC général (seule la cotisation sociale diffère) : voir MICRO_VL_BNC et ABATTEMENT_MICRO_BNC.', 'Urssaf.fr, décret n°2023-1351 (taux 2026, en vigueur depuis le 01/07/2024)'
 FROM typologie_prelevement WHERE code = 'COTIS_SOC';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
@@ -501,8 +506,12 @@ SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.212, 'base_directe', 'Décret n°2
 FROM prelevement WHERE code = 'MICRO_COTIS_SERVICES_BIC';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
-SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.256, 'base_directe', 'Décret n°2024-484 du 30/05/2024 — sources concordantes (Abby, LegalPlace, Subventions.fr). Taux CIPAV (23,2%) non modélisé séparément.'
+SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.256, 'base_directe', 'Décret n°2025-943 du 08/09/2025 — revérifié le 2026-07-29 (recoupement swim.legal, compta-online.com, arapl.org) : taux fixé à 25,6% pour 2026 (et non 26,1% comme prévu initialement, le décret du 08/09/2025 ayant abaissé la trajectoire de hausse). Taux CIPAV (23,2%) désormais modélisé séparément, voir MICRO_COTIS_CIPAV.'
 FROM prelevement WHERE code = 'MICRO_COTIS_BNC';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
+SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.232, 'base_directe', 'Urssaf.fr (arapl.org, exemple chiffré vérifié : 30000E de recettes -> 6960E de cotisations, soit exactement 23,2%) — vérifié le 2026-07-29, décret n°2023-1351, taux en vigueur depuis le 01/07/2024, stable pour 2026'
+FROM prelevement WHERE code = 'MICRO_COTIS_CIPAV';
 
 -- Versement libératoire de l'IR (optionnel, sous condition de RFR non
 -- vérifiée par ce moteur — voir independant.py)
@@ -556,6 +565,48 @@ FROM parametre_reference WHERE code = 'ABATTEMENT_MICRO_SERVICES_BIC';
 INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
 SELECT id, '2026-01-01', NULL, 0.34, 'Art. 102 ter CGI — sources concordantes (swim.legal, LegalPlace, LegalPlace exemple Claire 36000E->23760E), stable depuis plusieurs années'
 FROM parametre_reference WHERE code = 'ABATTEMENT_MICRO_BNC';
+
+-- Plafonds de chiffre d'affaires du régime micro (2026-2028, loi de
+-- finances 2026, revalorisation de +7,6%) — ajoutés le 2026-07-29
+-- (PROJECT_STATE.md section 7.3). Vérifiés par recoupement de multiples
+-- sources dont 2 officielles (autoentrepreneur.urssaf.fr,
+-- economie.gouv.fr). Un dépassement isolé sur une seule année civile est
+-- toléré ; la sortie du régime micro n'intervient qu'après un dépassement
+-- sur 2 années consécutives — cette mécanique pluriannuelle N'EST PAS
+-- vérifiée par fiscal_engine/independant.py (qui n'a connaissance que du
+-- CA de la période courante, pas de l'historique) : la fonction indique
+-- seulement si le CA fourni dépasse le plafond POUR CETTE ANNÉE, sans se
+-- prononcer sur la sortie effective du régime.
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PLAFOND_CA_MICRO_VENTE', 'Plafond de chiffre d''affaires annuel du régime micro (vente de marchandises, hébergement, meublés de tourisme classés)', 'Annual turnover cap for the micro-entrepreneur scheme (sale of goods, accommodation, classified tourist furnished lettings)', 'Techo de facturación anual del régimen de microempresario (venta de mercancías, alojamiento, alquileres turísticos clasificados)');
+
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PLAFOND_CA_MICRO_SERVICES', 'Plafond de chiffre d''affaires annuel du régime micro (prestations de services BIC/BNC, y compris CIPAV)', 'Annual turnover cap for the micro-entrepreneur scheme (BIC/BNC services, including CIPAV)', 'Techo de facturación anual del régimen de microempresario (servicios BIC/BNC, incluida la CIPAV)');
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 203100.0, 'Loi de finances 2026 — autoentrepreneur.urssaf.fr et economie.gouv.fr (sources officielles), +7,6% pour la période 2026-2028'
+FROM parametre_reference WHERE code = 'PLAFOND_CA_MICRO_VENTE';
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 83600.0, 'Loi de finances 2026 — autoentrepreneur.urssaf.fr et economie.gouv.fr (sources officielles), +7,6% pour la période 2026-2028'
+FROM parametre_reference WHERE code = 'PLAFOND_CA_MICRO_SERVICES';
+
+-- Seuil de revenu fiscal de référence (RFR) pour l'éligibilité au
+-- versement libératoire de l'IR (Art. 151-0 CGI) — ajouté le 2026-07-29
+-- (PROJECT_STATE.md section 7.3). Le RFR pris en compte est celui de
+-- l'année N-2 (pour une application en 2026 : RFR 2024, figurant sur
+-- l'avis d'imposition 2025) — CE MODULE NE VÉRIFIE PAS que le RFR fourni
+-- par l'appelant est bien celui de la bonne année, c'est à l'appelant de
+-- fournir le bon RFR. Le seuil est STRICTEMENT PROPORTIONNEL au nombre de
+-- parts du foyer (majoration de 50% par demi-part, 25% par quart de part —
+-- vérifié : 1 part=29315E, 2 parts=58630E, 2,5 parts=73288E,
+-- 3 parts=87945E, tous exactement égaux à 29315 x nombre_parts).
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'PLAFOND_RFR_VERSEMENT_LIBERATOIRE_1_PART', 'Plafond de revenu fiscal de référence (pour 1 part) ouvrant droit au versement libératoire de l''IR', 'Reference tax income cap (for 1 share) for eligibility to the final withholding income tax option', 'Techo de renta fiscal de referencia (para 1 parte) que da derecho al pago liberatorio del IRPF');
+
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 29315.0, 'Art. 151-0 CGI — recoupement de 5+ sources concordantes (lamicrobyflo.fr, legalplace.fr, swapn.fr, lscompta.fr, clictreso.fr), RFR 2024 (avis d''imposition 2025), pour une application en 2026'
+FROM parametre_reference WHERE code = 'PLAFOND_RFR_VERSEMENT_LIBERATOIRE_1_PART';
 
 -- =========================================================================
 -- Prélèvement Forfaitaire Unique (PFU / "flat tax") sur les revenus du
@@ -723,16 +774,21 @@ FROM prelevement WHERE code = 'CASA_RETRAITE';
 -- à additionner si les deux s'appliquent (pas de contrainte d'exclusivité
 -- dans le schéma, cohérent avec ce cumul réel).
 --
--- LIMITE IMPORTANTE, ASSUMÉE ET DOCUMENTÉE : ces règles calculent le
--- montant CORRECTEMENT si la teneur en sucre/édulcorant du produit est
--- connue (valeur_seuil). Mais cette donnée n'existe PAS au niveau "famille
--- de produit" de fr_categories_produits.sql — elle est propre à CHAQUE
--- référence produit (deux sodas de marques différentes ont des teneurs
--- différentes). La catégorie BOISSONS_SUCREES n'est donc PAS reliée à ces
--- prélèvements dans categorie_prelevement à ce stade : seule la TVA (20%)
--- y est rattachée pour l'instant. Le rattachement complet nécessite une
--- donnée de composition par produit — objectif explicite du prochain lot
--- (import Open Food Facts, qui expose la teneur en sucre par produit).
+-- LIMITE, PARTIELLEMENT RÉSOLUE le 2026-07-29 (voir PROJECT_STATE.md 7.5) :
+-- ces règles calculent le montant CORRECTEMENT si la teneur en
+-- sucre/édulcorant du produit est connue (valeur_seuil). Cette donnée
+-- n'existe PAS au niveau "famille de produit" de fr_categories_produits.sql
+-- — elle est propre à CHAQUE référence produit. Le rattachement
+-- BOISSONS_SUCREES -> ces 2 prélèvements est désormais fait dans
+-- fr_categories_produits.sql (il ne l'était pas avant cette date), et
+-- fiscal_engine/orchestrator.py sait résoudre valeur_seuil depuis
+-- produit_reference.teneur_sucre_100g quand la ligne est liée à un produit
+-- identifié (typiquement via import Open Food Facts). Pour
+-- TAXE_BOISSONS_EDULCORANT, la limite reste ENTIÈRE : OFF ne fournit que la
+-- présence d'un édulcorant, pas sa concentration en mg/L nécessaire au
+-- barème — ce prélèvement n'est donc jamais calculé automatiquement (voir
+-- commentaire détaillé dans fr_categories_produits.sql et
+-- orchestrator.py::_resoudre_valeur_seuil_produit).
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
 SELECT 'FR', id, 'TAXE_BOISSONS_SUCRE', 'Contribution sur les boissons non alcooliques contenant des sucres ajoutés', 'Contribution on non-alcoholic beverages containing added sugars', 'Contribución sobre bebidas no alcohólicas con azúcares añadidos',
        'Volume en hectolitres, tarif déterminé par la teneur en sucres ajoutés (kg par hL de boisson)', 'Art. 1613 ter du CGI'
@@ -745,13 +801,13 @@ FROM typologie_prelevement WHERE code = 'TAXE_ECO';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, unite, source_reference, commentaire)
 SELECT id, '2026-01-01', NULL, 'montant_par_unite_a_seuil', 'hL',
-       'BOFiP BOI-BAREME-000038 du 24/12/2025, tarifs 2026 (art. 1613 ter du CGI)',
+       'BOFiP BOI-BAREME-000038 du 24/12/2025, tarifs 2026 (art. 1613 ter du CGI) — vérifié par lecture directe de la page BOFiP le 2026-07-29 (4,07/21,38/35,63)',
        'valeur_seuil = kg de sucres ajoutés par hL de boisson'
 FROM prelevement WHERE code = 'TAXE_BOISSONS_SUCRE';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, unite, source_reference, commentaire)
 SELECT id, '2026-01-01', NULL, 'montant_par_unite_a_seuil', 'hL',
-       'BOFiP BOI-BAREME-000038 du 24/12/2025, tarifs 2026 (art. 1613 quater du CGI)',
+       'BOFiP BOI-BAREME-000038 du 24/12/2025, tarifs 2026 (art. 1613 quater du CGI) — vérifié par lecture directe de la page BOFiP le 2026-07-29 (4,50/6,00)',
        'valeur_seuil = mg d''édulcorants de synthèse par litre de boisson'
 FROM prelevement WHERE code = 'TAXE_BOISSONS_EDULCORANT';
 
@@ -777,9 +833,28 @@ SELECT rp.id, 120, NULL, 6.00 FROM regle_prelevement rp JOIN prelevement p ON p.
 -- l'article L.314-24 du code des impositions sur les biens et services
 -- (CIBS) et l'arrêté du 24/12/2025 (JORF n°0306 du 31/12/2025).
 --
+-- FIABILISÉ le 2026-07-29 (PROJECT_STATE.md section 7.7) : les paramètres
+-- ci-dessous (taux/tarif/minimum de perception) ont été revérifiés par
+-- lecture directe de la page douane.gouv.fr "La fiscalité appliquée aux
+-- tabacs manufacturés..." (mise à jour du 05/01/2026, donc récente et
+-- reflétant encore la situation à cette date) — tous exacts, aucune
+-- correction nécessaire. CLARIFICATION IMPORTANTE sur le risque "tarifs
+-- changés en cours d'année" précédemment signalé : ce qui change plusieurs
+-- fois par an (6 arrêtés d'homologation prévus en 2026) ce sont les PRIX
+-- DE VENTE AU DÉTAIL par référence/marque commerciale — PAS les paramètres
+-- de l'accise (taux/tarif/minimum) eux-mêmes, qui restent fixes pour toute
+-- l'année 2026 sauf nouvel arrêté modifiant explicitement l'article
+-- L.314-24 CIBS. Notre moteur prend le prix de vente en INPUT (lu sur le
+-- ticket), donc il n'a pas besoin de connaître le prix par référence :
+-- seuls les paramètres de l'accise doivent rester à jour, ce qui est
+-- confirmé le cas ici.
+-- 2 catégories fiscales MANQUANTES ont été trouvées et ajoutées à cette
+-- date : "autres tabacs à fumer ou à inhaler après avoir été chauffés"
+-- (narguilé, blunts...) et "autres tabacs à chauffer" (hors bâtonnets).
+--
 -- MÉCANISME (formule officielle, vérifiée à l'euro près contre les DEUX
 -- exemples chiffrés publiés par la douane elle-même - paquet "bas de
--- marché" 11,50€ et "premium" 13,50€) :
+-- marché" 11,50€ [accise=7,791€] et "premium" 13,50€ [accise=8,891€]) :
 --   accise = MAX(taux% x prix_de_vente + tarif x (quantité/1000),
 --                minimum_de_perception x (quantité/1000))
 -- où `quantité` = nombre d'unités (cigarettes, cigares) ou de grammes
@@ -817,6 +892,16 @@ SELECT 'FR', id, 'ACCISE_TABAC_CHAUFFER_BATONNETS', 'Accise sur le tabac à chau
 FROM typologie_prelevement WHERE code = 'ACCISES';
 
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_TABAC_AUTRE_A_FUMER_APRES_CHAUFFAGE', 'Accise sur les autres tabacs à fumer ou à inhaler après avoir été chauffés (narguilé, blunts, etc.)', 'Excise duty on other tobacco smoked or inhaled after heating (hookah, blunts, etc.)', 'Impuesto especial sobre otros tabacos fumados o inhalados tras calentamiento (narguile, blunts, etc.)',
+       'Prix de vente au détail (base) et poids en grammes (quantité)', 'Art. L.314-24 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_TABAC_CHAUFFER_AUTRE', 'Accise sur les autres tabacs à chauffer (hors bâtonnets)', 'Excise duty on other heated tobacco (other than sticks)', 'Impuesto especial sobre otros tabacos calentados (distintos de las varillas)',
+       'Prix de vente au détail (base) et poids en grammes (quantité)', 'Art. L.314-24 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
 SELECT 'FR', id, 'ACCISE_TABAC_PRISER', 'Accise sur le tabac à priser', 'Excise duty on snuff tobacco', 'Impuesto especial sobre el tabaco para inhalar',
        'Prix de vente au détail', 'Art. L.314-24 CIBS'
 FROM typologie_prelevement WHERE code = 'ACCISES';
@@ -849,6 +934,18 @@ SELECT id, '2026-01-01', NULL, 'formule', 'max(0.514*base + 50.90*(quantite/1000
        'douane.gouv.fr, tarifs applicables au 01/01/2026 (arrêté du 24/12/2025)',
        'base = prix de vente au détail ; quantite = nombre de bâtonnets'
 FROM prelevement WHERE code = 'ACCISE_TABAC_CHAUFFER_BATONNETS';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'max(0.514*base + 36.20*(quantite/1000), 153.70*(quantite/1000))',
+       'douane.gouv.fr, tarifs applicables au 01/01/2026 (arrêté du 24/12/2025) — catégorie ajoutée le 2026-07-29, absente du seed initial',
+       'base = prix de vente au détail ; quantite = poids en grammes'
+FROM prelevement WHERE code = 'ACCISE_TABAC_AUTRE_A_FUMER_APRES_CHAUFFAGE';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'max(0.514*base + 192.30*(quantite/1000), 1267.90*(quantite/1000))',
+       'douane.gouv.fr, tarifs applicables au 01/01/2026 (arrêté du 24/12/2025) — catégorie ajoutée le 2026-07-29, absente du seed initial',
+       'base = prix de vente au détail ; quantite = poids en grammes'
+FROM prelevement WHERE code = 'ACCISE_TABAC_CHAUFFER_AUTRE';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, taux, assiette, source_reference)
 SELECT id, '2026-01-01', NULL, 'taux_fixe', 0.581, 'base_directe', 'douane.gouv.fr, tarifs applicables au 01/01/2026 — pas de tarif spécifique ni de minimum de perception pour cette catégorie'
@@ -955,6 +1052,109 @@ SELECT id, '2026-01-01', NULL, 'formule', 'quantite * (seuil/100) * 620.47',
        'douane.gouv.fr, tarif 2026 (arrêté du 24/12/2025), Art. L.245-9 1° CSS — cumulative avec ACCISE_SPIRITUEUX, pas alternative',
        'Applicable uniquement si degré > 18% vol. (condition gérée par fiscal_engine/alcool.py, pas par cette règle elle-même)'
 FROM prelevement WHERE code = 'COTIS_SOC_ALCOOL_FORT';
+
+-- =========================================================================
+-- 4 prélèvements ajoutés le 2026-07-29 (PROJECT_STATE.md section 7.6) :
+-- rhums DOM, petites brasseries, VDN/VDL AOP (accise réduite + cotisation
+-- sécu réduite), et taxe prémix. Orchestrés par fiscal_engine/alcool.py
+-- (nouveaux paramètres optionnels et nouvelles fonctions — voir ce fichier).
+-- =========================================================================
+
+-- Rhums des DOM : tarif réduit, dans la limite d'un contingent annuel
+-- national de 153 000 hlap réparti par arrêté entre distilleries (Art.
+-- L.313-25 CIBS). Au-delà du contingent individuel, une "soulte" de
+-- 304,90€/hlap s'ajoute — NON gérée ici (ce module applique toujours le
+-- tarif réduit dès que rhum_dom=True, en assumant l'usage le plus courant :
+-- un rhum DOM vendu en métropole reste très généralement dans son
+-- contingent). Vérifié par lecture directe de douane.gouv.fr le 2026-07-29.
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_SPIRITUEUX_RHUM_DOM', 'Droit de consommation sur les rhums traditionnels des départements d''outre-mer (dans la limite du contingent)', 'Excise duty on traditional overseas department rums (within quota)', 'Impuesto especial sobre los rones tradicionales de los departamentos de ultramar (dentro del contingente)',
+       'Volume en hectolitres x (degré d''alcool / 100), soit l''équivalent en hlap', 'Art. L.313-25 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'quantite * (seuil/100) * 966.75',
+       'douane.gouv.fr, tarif 2026 (arrêté du 24/12/2025), Art. L.313-25 CIBS — vérifié par lecture directe le 2026-07-29',
+       'quantite = volume en hL ; seuil = degré d''alcool. Contingent annuel non vérifié (voir commentaire du prélèvement) : tarif réduit appliqué systématiquement quand rhum_dom=True.'
+FROM prelevement WHERE code = 'ACCISE_SPIRITUEUX_RHUM_DOM';
+
+-- Petites brasseries indépendantes (production annuelle <= 200 000 hL) :
+-- bénéficient du tarif "bière légère" (4,12€/hL·degré) même pour une bière
+-- >2,8% vol, par dérogation. Le montant est identique à ACCISE_BIERE_LEGERE
+-- mais un code distinct est créé pour la traçabilité (base légale
+-- différente : dérogation petite brasserie, pas le seuil de degré).
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_BIERE_PETITE_BRASSERIE', 'Droit d''accise sur la bière (>2,8% vol.), taux réduit petite brasserie indépendante (≤200 000 hL/an)', 'Excise duty on beer (>2.8% vol.), reduced rate for independent small breweries (≤200,000 hL/year)', 'Impuesto especial sobre la cerveza (>2,8% vol.), tipo reducido para pequeñas cervecerías independientes (≤200.000 hL/año)',
+       'Volume en hectolitres x degré d''alcool', 'CIBS, régime dérogatoire petites brasseries indépendantes (douane.gouv.fr, fiche "Fiscalité de la bière")'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'quantite * seuil * 4.12',
+       'douane.gouv.fr, tarif 2026 (arrêté du 24/12/2025) — vérifié par lecture directe le 2026-07-29',
+       'quantite = volume en hL ; seuil = degré d''alcool. Montant identique à ACCISE_BIERE_LEGERE, code distinct pour traçabilité de la base légale.'
+FROM prelevement WHERE code = 'ACCISE_BIERE_PETITE_BRASSERIE';
+
+-- VDN/VDL AOP (vins doux naturels / vins de liqueur à appellation d'origine
+-- protégée) : accise réduite (52,39€/hL, vs 209,53€/hL pour les autres
+-- produits intermédiaires) ET, s'ils titrent plus de 18% vol., cotisation
+-- sécu réduite (20,97€/hL de PRODUIT FINI — PAS d'alcool pur, à la
+-- différence des spiritueux). Cette cotisation réduite correspond à environ
+-- 40% de l'accise réduite (52,39 x 0.40 ≈ 20,96), cohérent avec le
+-- plafond légal "40% du droit d'accise applicable" (Art. L.245-9 CSS).
+-- Pour les "autres produits intermédiaires" (non VDN/VDL AOP) titrant plus
+-- de 18% vol., la cotisation sécu correspondante N'EST PAS gérée (cas rare,
+-- limite résiduelle assumée — voir PROJECT_STATE.md section 7.6).
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ACCISE_PRODUIT_INTERMEDIAIRE_VDN_VDL_AOP', 'Droit de circulation sur les vins doux naturels et vins de liqueur à appellation d''origine protégée', 'Excise duty on naturally sweet wines and liqueur wines with protected designation of origin', 'Impuesto especial sobre los vinos dulces naturales y vinos de licor con denominación de origen protegida',
+       'Volume en hectolitres', 'Art. L.313-21 CIBS'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 52.39, 'hL',
+       'douane.gouv.fr / vinetur.com (recoupement 2 sources), tarif 2026 (arrêté du 24/12/2025) — vérifié le 2026-07-29'
+FROM prelevement WHERE code = 'ACCISE_PRODUIT_INTERMEDIAIRE_VDN_VDL_AOP';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'COTIS_SOC_VDN_VDL_AOP', 'Cotisation sécurité sociale sur les VDN/VDL AOP titrant plus de 18% vol.', 'Social security contribution on naturally sweet/liqueur AOP wines over 18% vol.', 'Cotización de seguridad social sobre los vinos dulces/de licor AOP de más de 18% vol.',
+       'Volume en hectolitres de PRODUIT FINI (pas d''alcool pur) — uniquement si degré > 18% vol.', 'Art. L.245-9 CSS'
+FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 20.97, 'hL',
+       'Recoupement de 2 sources indépendantes (vinetur.com, cepaos.com), tarif 2026, Art. L.245-9 CSS — vérifié le 2026-07-29 (1 seule source pour chacune séparément, valeur confirmée par cohérence avec la règle légale "40% max de l''accise applicable" : 52,39 x 0,40 ≈ 20,96)',
+       'Base = volume en hL de produit fini (PAS hlap, contrairement à COTIS_SOC_ALCOOL_FORT). Applicable uniquement si degré > 18% vol.'
+FROM prelevement WHERE code = 'COTIS_SOC_VDN_VDL_AOP';
+
+-- Taxe prémix (Art. 1613 bis CGI, versé à la CNAM) : boissons résultant du
+-- mélange d'alcool et de boisson non alcoolisée (titre alcoométrique final
+-- >1,2% et <12% vol.). Deux tarifs selon la catégorie fiscale de la boisson
+-- de base : 1° "vins ou autres boissons fermentées" (moins taxé) ; 2°
+-- "autres boissons" (spiritueux notamment, plus taxé — c'est la valeur par
+-- défaut retenue par fiscal_engine/alcool.py::calculer_taxe_premix, car
+-- elle couvre la majorité des prémix du marché). Texte vérifié directement
+-- sur Légifrance le 2026-07-29 (article 1613 bis CGI, en vigueur depuis le
+-- 31/12/2025, tarifs inchangés pour 2026).
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'TAXE_PREMIX_VIN', 'Taxe sur les prémix à base de vin ou d''autres boissons fermentées', 'Tax on wine or other fermented beverage-based premixed drinks', 'Impuesto sobre las bebidas premezcladas a base de vino u otras bebidas fermentadas',
+       'Volume en hectolitres x (degré d''alcool / 100), soit l''équivalent en hlap', 'Art. 1613 bis II 1° CGI'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'TAXE_PREMIX_AUTRE', 'Taxe sur les autres prémix (notamment à base de spiritueux)', 'Tax on other premixed drinks (notably spirits-based)', 'Impuesto sobre otras bebidas premezcladas (especialmente a base de bebidas espirituosas)',
+       'Volume en hectolitres x (degré d''alcool / 100), soit l''équivalent en hlap', 'Art. 1613 bis II 2° CGI'
+FROM typologie_prelevement WHERE code = 'ACCISES';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'quantite * (seuil/100) * 3000',
+       'Légifrance, art. 1613 bis II 1° CGI (3€/décilitre d''alcool pur x 1000 dL/hL = 3000€/hlap) — vérifié par lecture directe le 2026-07-29',
+       'quantite = volume en hL ; seuil = degré d''alcool'
+FROM prelevement WHERE code = 'TAXE_PREMIX_VIN';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, formule, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'formule', 'quantite * (seuil/100) * 11000',
+       'Légifrance, art. 1613 bis II 2° CGI (11€/décilitre d''alcool pur x 1000 dL/hL = 11000€/hlap) — vérifié par lecture directe le 2026-07-29',
+       'quantite = volume en hL ; seuil = degré d''alcool'
+FROM prelevement WHERE code = 'TAXE_PREMIX_AUTRE';
 
 -- =========================================================================
 -- Fin du contenu fiscal — Lot 3
