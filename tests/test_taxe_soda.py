@@ -166,5 +166,67 @@ class TestTaxeEdulcorantJamaisCalculeeAutomatiquement(unittest.TestCase):
         self.assertAlmostEqual(montants["TAXE_BOISSONS_SUCRE"], 4.07)
 
 
+class TestDiagnostiquerTaxesNonCalculees(unittest.TestCase):
+    """Ajouté le 2026-08-02 (PROJECT_STATE.md section 7.5) : alerte quand
+    une taxe soda n'a pas pu être calculée, sans casser le traitement
+    principal de la ligne.
+    """
+
+    def setUp(self):
+        self.conn = _creer_bdd_reelle()
+
+    def test_taxe_sucre_calculable_seul_avertissement_est_edulcorant(self):
+        # La teneur en sucre est connue -> TAXE_BOISSONS_SUCRE ne genere pas
+        # d'avertissement. TAXE_BOISSONS_EDULCORANT en genere TOUJOURS un
+        # (jamais calculable, quelles que soient les donnees disponibles).
+        id_produit = _creer_produit(self.conn, teneur_sucre_100g=6.0)
+        id_ligne = _creer_document_avec_ligne(self.conn, produit_reference_id=id_produit, quantite=100.0)
+        avertissements = orchestrator.diagnostiquer_taxes_non_calculees(self.conn, id_ligne, DATE_REF)
+        self.assertEqual(len(avertissements), 1)
+        self.assertIn("édulcorant", avertissements[0].lower())
+
+    def test_sans_produit_reference_avertissement_pour_taxe_sucre(self):
+        id_ligne = _creer_document_avec_ligne(self.conn, produit_reference_id=None, quantite=100.0)
+        avertissements = orchestrator.diagnostiquer_taxes_non_calculees(self.conn, id_ligne, DATE_REF)
+        self.assertTrue(any("TAXE_BOISSONS_SUCRE" in a or "sucre" in a.lower() for a in avertissements))
+
+    def test_produit_sans_teneur_sucre_avertissement(self):
+        id_produit = _creer_produit(self.conn, teneur_sucre_100g=None)
+        id_ligne = _creer_document_avec_ligne(self.conn, produit_reference_id=id_produit, quantite=100.0)
+        avertissements = orchestrator.diagnostiquer_taxes_non_calculees(self.conn, id_ligne, DATE_REF)
+        # 2 avertissements : sucre (teneur inconnue) + edulcorant (toujours,
+        # quelles que soient les donnees disponibles)
+        self.assertEqual(len(avertissements), 2)
+
+    def test_edulcorant_toujours_dans_les_avertissements(self):
+        # Meme avec toutes les donnees connues (teneur sucre presente), la
+        # taxe edulcorant genere TOUJOURS un avertissement (jamais calculable)
+        id_produit = _creer_produit(self.conn, teneur_sucre_100g=6.0, contient_edulcorants=1)
+        id_ligne = _creer_document_avec_ligne(self.conn, produit_reference_id=id_produit, quantite=100.0)
+        avertissements = orchestrator.diagnostiquer_taxes_non_calculees(self.conn, id_ligne, DATE_REF)
+        self.assertEqual(len(avertissements), 1)
+        self.assertIn("édulcorant", avertissements[0].lower())
+
+    def test_ligne_sans_categorie_produit_aucun_avertissement(self):
+        curseur = self.conn.execute(
+            "INSERT INTO document (type_document, date_document) VALUES ('ticket_caisse', ?)", (DATE_REF,)
+        )
+        id_document = curseur.lastrowid
+        curseur = self.conn.execute(
+            "INSERT INTO ligne_document (document_id, libelle_brut, montant) VALUES (?, 'Ligne TOTAL', 0)",
+            (id_document,),
+        )
+        self.conn.commit()
+        avertissements = orchestrator.diagnostiquer_taxes_non_calculees(self.conn, curseur.lastrowid, DATE_REF)
+        self.assertEqual(avertissements, [])
+
+    def test_ne_leve_jamais_dexception(self):
+        id_ligne = _creer_document_avec_ligne(self.conn, produit_reference_id=None, quantite=100.0)
+        try:
+            orchestrator.diagnostiquer_taxes_non_calculees(self.conn, id_ligne, DATE_REF)
+        except Exception as exc:  # pragma: no cover
+            self.fail(f"diagnostiquer_taxes_non_calculees a levé une exception inattendue : {exc}")
+
+
 if __name__ == "__main__":
     unittest.main()
