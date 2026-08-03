@@ -150,21 +150,49 @@ recloné à neuf, 143 tests passants à l'époque) :
    211 tests. **Ceci clôt le plan de fiabilisation en 4 points validé le
    2026-07-29 (7.5 → 7.6 → 7.7 → 7.3, tous faits).**
 
+**Lot 7 (2026-08-02) — ⚠️ PAS ENCORE UPLOADÉ sur GitHub** :
+
+10. **TICPE régionale (7.4)** : découverte que la majoration régionale a
+    été purement et simplement abolie au 01/01/2026 (confirmé lecture
+    directe impots.gouv.fr) — rien à intégrer, juste documenté.
+11. **CSG retraite étendue (7.2)** : nombre de parts arbitraire
+    (1/1,5/2/2,5/3...) par extrapolation officielle, et mécanisme de
+    lissage. `fiscal_engine/retraite.py` entièrement refondu (voir section
+    7.2). `tests/test_engine.py::TestRetraite` (obsolète, mécanisme
+    remplacé) retiré ; `tests/test_retraite.py` réécrit (24 tests).
+12. **Taxe soda (7.5)** : recherche de source tierce pour
+    TAXE_BOISSONS_EDULCORANT menée à bien mais SANS résultat positif
+    (aucune base publique de concentration en édulcorant n'existe,
+    confirmé par recherche approfondie) — limite honnêtement documentée
+    comme non résolue. Alerte ajoutée : nouvelle fonction
+    `orchestrator.diagnostiquer_taxes_non_calculees` (6 nouveaux tests).
+13. Voir section 7.10 pour les nouvelles sources de mapping produits
+    proposées (recherche menée, pas encore intégrée — en attente de choix
+    utilisateur).
+
+Suite complète passée de 211 à 226 tests.
+
 **Fichiers modifiés/créés localement à uploader sur GitHub pour les lots 3
-à 6** (l'environnement Claude ne peut cloner/lire le repo, pas y pousser de
+à 7** (l'environnement Claude ne peut cloner/lire le repo, pas y pousser de
 commits — ces lots n'ont pas encore été vérifiés par un reclonage depuis la
 dernière confirmation d'upload, lot 2) :
-- `fiscal_engine/orchestrator.py` (modifié — résolution de valeur_seuil)
+- `fiscal_engine/orchestrator.py` (modifié — résolution de valeur_seuil +
+  fonction d'alerte `diagnostiquer_taxes_non_calculees`)
 - `fiscal_engine/alcool.py` (modifié — 4 nouveaux points gérés)
 - `fiscal_engine/independant.py` (modifié — CIPAV, plafonds CA, éligibilité VL)
+- `fiscal_engine/retraite.py` (réécrit — parts arbitraires + lissage)
 - `seed_data/fr_categories_produits.sql` (modifié — rattachement taxe soda)
 - `seed_data/fr_seed_lot3.sql` (modifié — commentaires taxe soda + 6
   nouveaux prélèvements alcool + 2 nouvelles catégories tabac + CIPAV +
-  plafonds CA + seuil RFR versement libératoire)
-- `tests/test_taxe_soda.py` (nouveau)
+  plafonds CA + seuil RFR versement libératoire + refonte seuils CSG
+  retraite + commentaire TICPE)
+- `tests/test_taxe_soda.py` (modifié — 6 nouveaux tests d'alerte)
 - `tests/test_alcool.py` (modifié — 14 nouveaux tests)
 - `tests/test_tabac.py` (nouveau)
 - `tests/test_independant.py` (nouveau)
+- `tests/test_retraite.py` (réécrit)
+- `tests/test_engine.py` (modifié — retrait de la fixture et de la classe
+  TestRetraite, devenues obsolètes)
 - `PROJECT_STATE.md` (ce document, mis à jour)
 
 **⚠️ Si tu commences une nouvelle session sans avoir uploadé ces fichiers**,
@@ -205,7 +233,7 @@ Fiscal-tracker/
 │   └── ticket_caisse.py            — Parser ticket de caisse
 ├── imports/                      — Import de sources de données externes
 │   └── off_import.py              — Import Open Food Facts
-├── tests/                        — 211 tests au total (tous passants,
+├── tests/                        — 226 tests au total (tous passants,
 │                                    2 skips intentionnels — voir section 3)
 │   ├── test_engine.py
 │   ├── test_alcool.py
@@ -331,31 +359,48 @@ n'importe quelle formule sans modification du schéma.
   traiter dans une prochaine itération si besoin).
 
 ### 7.2 CSG retraite (`fiscal_engine/retraite.py`)
-- **✅ Fiabilisé le 2026-07-29** : les seuils RFR 2026 sont désormais
-  vérifiés sur la source officielle « L'Assurance Retraite » (CNAV),
+- **✅ Fiabilisé le 2026-07-29, ÉTENDU le 2026-08-02** : les seuils RFR 2026
+  sont vérifiés sur la source officielle « L'Assurance Retraite » (CNAV),
   tableau mis à jour le 09/01/2026 :
   https://www.lassuranceretraite.fr/portail-info/hors-menu/actualites-nationales/retraite/2026/prelevements-sociaux-2025.html
   Seuils confirmés (1 part) : 13048€ / 17057€ / 26472€.
-  Seuils confirmés (2 parts) : 20016€ / 26167€ / **40604€** (corrigé, voir
-  ci-dessous).
-  **Une erreur réelle a été trouvée et corrigée** : le seuil médian/normal
-  à 2 parts était à 39886€ (valeur 2025, non revalorisée) au lieu de
-  40604€ (valeur 2026 officielle, +1,8%). Verrouillé par
-  `tests/test_retraite.py` (nouveau fichier, teste les vraies données du
-  seed plutôt que des seuils ronds arbitraires comme `test_engine.py`).
-- Convention de borne à noter (comportement du moteur générique, pas
-  spécifique à ce module) : à la valeur RFR exactement égale à une borne
-  haute (ex : RFR = 26472€ ou RFR = 40604€ pile), le taux INFÉRIEUR
-  s'applique encore (ex : médian, pas normal) — décalage d'un euro par
-  rapport au libellé CNAV "RFR > X€". Sans impact pratique réel, mais
-  documenté et testé explicitement (`test_valeur_exacte_du_seuil_haut_reste_median`).
-- Seuls les foyers à 1 ou 2 parts sont couverts (la source officielle
-  donne aussi des seuils pour 1,5 / 2,5 / 3 parts et par demi-part
-  supplémentaire — pourrait être ajouté dans une prochaine itération).
-- Le mécanisme de "lissage" n'est pas géré. Précision apportée par la
-  source officielle : ce lissage ne joue QUE pour le passage réduit
-  (3,8%) → médian (6,6%) ; il n'existe AUCUN lissage pour le passage
-  médian (6,6%) → normal (8,3%), qui s'applique immédiatement.
+  Seuils confirmés (2 parts) : 20016€ / 26167€ / 40604€.
+- **Extension à un nombre de parts arbitraire (1,5/2,5/3 parts et par
+  demi-part supplémentaire)** : `fiscal_engine/retraite.py` entièrement
+  refondu — abandon de l'ancien mécanisme discret (tables séparées pour 1
+  et 2 parts) au profit d'un calcul par extrapolation : seuils 1 part +
+  incrément fixe par demi-part supplémentaire (3484€/4555€/7066€ pour
+  exo/réduit/normal). Ces incréments proviennent d'une source secondaire
+  (capretraite.fr), mais leur fiabilité a été confirmée par COHÉRENCE
+  ARITHMÉTIQUE : la différence entre les seuils 2 parts et 1 part déjà
+  officiels (CNAV) est exactement égale à 2x chaque incrément annoncé — un
+  degré de confiance élevé, mais pas une lecture directe d'une page CNAV
+  listant explicitement 1,5/2,5/3 parts. Tous les nombres de parts multiples
+  de 0,5 (>= 1) sont donc gérés (`ValueError` sinon). Verrouillé par
+  `tests/test_retraite.py` (24 tests, dont vérification de cohérence
+  croisée sur 1/1,5/2/2,5/3 parts).
+- **Mécanisme de "lissage" géré** : nouveau paramètre optionnel
+  `revenu_fiscal_reference_n_moins_3` sur `calculer_prelevements_retraite`.
+  Portée précisément confirmée par la source officielle CNAV : protège
+  UNIQUEMENT le passage depuis la tranche réduite (3,8%, déterminée par le
+  RFR N-3) vers une tranche supérieure (déterminée par le RFR N-2) — si le
+  RFR N-3 ne plaçait pas déjà le foyer à réduit, ou si le franchissement
+  est confirmé 2 années de suite, le lissage ne s'applique pas. Non fourni
+  (valeur par défaut `None`), le taux est déterminé strictement par le RFR
+  N-2, sans lissage — simplification assumée pour les appelants sans
+  historique.
+- Convention de borne à noter (comportement du moteur, inchangé) : à la
+  valeur RFR exactement égale à une borne haute, le taux INFÉRIEUR
+  s'applique encore — décalage d'un euro par rapport au libellé CNAV
+  "RFR > X€", sans impact pratique réel, documenté et testé.
+- **Limite résiduelle non confirmée** : le lissage protège-t-il aussi le
+  passage exonéré (0%) → réduit (3,8%) ? Aucune source officielle
+  explicite trouvée pour ce cas précis (seul le passage réduit → tranche
+  supérieure est officiellement documenté) — ce module ne l'applique donc
+  PAS à ce cas, choix conservateur documenté dans le code.
+- `revenu_net_imposable`-équivalent (ici : le fait que ce module ne calcule
+  pas lui-même le RFR à partir de revenus bruts) reste hors périmètre,
+  comme documenté ailleurs dans ce fichier pour des modules similaires.
 
 ### 7.3 Régime indépendant (`fiscal_engine/independant.py`)
 - **✅ Fiabilisé le 2026-07-29** — 3 des 4 points ci-dessous couverts,
@@ -390,9 +435,18 @@ n'importe quelle formule sans modification du schéma.
   (réduction de cotisations 1ère année) : toujours non gérés.
 
 ### 7.4 TICPE / TICGN
-- Majoration régionale de la TICPE non gérée (chaque région peut moduler
-  le taux national dans une limite encadrée) — seul le taux national
-  s'applique.
+- **✅ Traité le 2026-08-02 — découverte inattendue : rien à intégrer.** La
+  "majoration régionale" listée ici comme non gérée n'existe PLUS DU TOUT
+  depuis le 1er janvier 2026. Confirmé par lecture directe de la source
+  officielle impots.gouv.fr (page "Accise sur les produits pétroliers
+  (ex-TICPE)", modifiée le 11/02/2026) : le mécanisme de modulation
+  régionale (art. L.312-39 et L.312-40 CIBS) a été supprimé par
+  alignement des tarifs régionaux. Les 2 taux nationaux déjà présents
+  (0,6829€/L essence, 0,5940€/L gazole) sont donc désormais le taux
+  UNIQUE et COMPLET pour toute la France métropolitaine (hors Corse et
+  DROM, dont les régimes spécifiques restent hors périmètre, non
+  demandés) — aucune modélisation supplémentaire n'était en réalité
+  nécessaire.
 
 ### 7.5 Taxe soda (`TAXE_BOISSONS_SUCRE` / `TAXE_BOISSONS_EDULCORANT`)
 - **✅ Fiabilisé le 2026-07-29** : tarifs 2026 vérifiés par lecture directe
@@ -408,24 +462,31 @@ n'importe quelle formule sans modification du schéma.
   `ligne_document.produit_reference_id`) pour calculer automatiquement
   `TAXE_BOISSONS_SUCRE` sur une ligne d'achat identifiée à un produit connu
   (typiquement importé via OFF). Verrouillé par le nouveau fichier
-  `tests/test_taxe_soda.py` (7 tests, sur les vraies données du seed).
-- **`TAXE_BOISSONS_EDULCORANT` reste JAMAIS calculée automatiquement**
-  (limite non résolue, comportement volontaire et testé) : OFF ne fournit
-  que la PRÉSENCE d'un édulcorant (`contient_edulcorants`), jamais sa
-  CONCENTRATION en mg/L pourtant nécessaire pour choisir la bonne tranche
-  du barème. Le rattachement `categorie_prelevement` existe (prêt si une
-  source de données fournit un jour la concentration), mais
-  `orchestrator.py::_resoudre_valeur_seuil_produit` renvoie toujours `None`
-  pour cette taxe précise, donc elle est silencieusement absente du
-  résultat — pas de montant inventé. Un utilisateur redevable de cette
-  contribution doit la vérifier manuellement.
-- Comportement à connaître pour une future interface utilisateur : quand
-  `TAXE_BOISSONS_SUCRE` ne peut pas être calculée (produit non identifié,
-  ou identifié mais sans donnée de teneur en sucre), l'orchestrateur ne
-  lève PAS d'exception et ne bloque pas le reste de la ligne (la TVA, par
-  exemple, est toujours calculée normalement) — mais rien ne signale
-  aujourd'hui à l'utilisateur final que cette taxe précise est absente du
-  résultat. Une interface devra le faire explicitement.
+  `tests/test_taxe_soda.py` (13 tests, sur les vraies données du seed).
+- **`TAXE_BOISSONS_EDULCORANT` reste JAMAIS calculée automatiquement —
+  recherche de source tierce menée le 2026-08-02, SANS RÉSULTAT** :
+  recherche approfondie (BOFiP, douane.gouv.fr, Open Food Facts lui-même)
+  pour trouver une source (gouvernementale ou tierce) documentant la
+  concentration en édulcorant par produit, comme le suggérait
+  l'utilisateur. **Aucune base publique de ce type n'existe** : les
+  fabricants déclarent cette donnée directement à la douane via le
+  portail professionnel CIEL (Contributions Indirectes En Ligne), qui
+  n'est pas une base de données publique/ouverte. Open Food Facts
+  confirme lui-même sur son propre blog que "la quantité réelle
+  d'aspartame n'est pas toujours précisée sur les produits". Cette limite
+  reste donc réelle et non résolue à ce jour, pas faute de chercher.
+- **✅ Alerte ajoutée le 2026-08-02** : nouvelle fonction
+  `orchestrator.diagnostiquer_taxes_non_calculees(conn, ligne_document_id,
+  date_reference) -> list[str]`, à appeler en complément de
+  `traiter_ligne_document` (qui continue d'ignorer silencieusement les
+  taxes non calculables, par conception, pour ne pas casser le traitement
+  du reste de la ligne). Retourne des messages humains-lisibles expliquant
+  précisément pourquoi une taxe soda n'a pas pu être calculée (produit non
+  identifié, teneur en sucre inconnue, ou — systématiquement —
+  édulcorant non calculable par nature). Verrouillé par 6 nouveaux tests
+  dans `tests/test_taxe_soda.py`. Une future interface utilisateur DEVRA
+  appeler cette fonction et afficher ces avertissements pour que l'absence
+  de calcul soit visible plutôt que silencieuse.
 
 ### 7.6 Alcool (`fiscal_engine/alcool.py`)
 - **✅ Fiabilisé le 2026-07-29** — les 4 points ci-dessous sont désormais
@@ -508,6 +569,44 @@ n'importe quelle formule sans modification du schéma.
   au fil de l'usage réel (un produit sans tag correspondant est importé
   mais reste sans catégorie, donc sans prélèvement calculable
   automatiquement).
+- **Recherche de sources complémentaires menée le 2026-08-02 (PAS ENCORE
+  intégrée — proposition en attente de décision utilisateur)** :
+  1. **Open Beauty Facts** (openbeautyfacts.org) : base sœur d'OFF, MÊME
+     infrastructure (API, format d'export DuckDB/JSONL, licence ODbL),
+     dédiée aux cosmétiques/soins personnels — correspondance directe avec
+     la catégorie `PRODUITS_HYGIENE_BEAUTE`. ~13 000+ produits. Le module
+     `imports/off_import.py` existant pourrait être adapté avec un effort
+     minimal (même structure de champs).
+  2. **Open Pet Food Facts** (openpetfoodfacts.org) : idem, dédiée à
+     l'alimentation animale — correspondance directe avec
+     `ALIMENTATION_ANIMAUX`. Même infrastructure/licence.
+  3. **Open Products Facts** (openproductsfacts.org) : base sœur "tout le
+     reste" (non alimentaire, non cosmétique) — pertinente pour
+     électroménager/informatique/textile/etc., mais ENCORE TRÈS PETITE en
+     pratique (quelques dizaines à centaines de produits observés en
+     France lors de cette recherche) : ne résoudrait pas le manque de
+     sous-catégories fines à elle seule aujourd'hui, mais coûte peu à
+     brancher (même infra) et grossira avec le temps — investissement à
+     faible coût, bénéfice différé.
+  4. **Nomenclature COICOP de l'INSEE** (insee.fr/fr/metadonnees/coicop2016)
+     : PAS une base de produits, mais la classification officielle
+     (européenne/internationale) de la consommation des ménages, utilisée
+     par l'INSEE pour l'IPC et l'enquête "Budget des familles". Contient
+     déjà des sous-catégories officielles précises qui manquent à notre
+     `categorie_produit` (ex : 09.3.4.2.1 "Produits pour animaux
+     domestiques" séparé des services vétérinaires 09.3.5). Proposition :
+     s'en servir comme PLAN DIRECTEUR pour choisir de nouvelles
+     sous-catégories (électroménager/informatique notamment, voir
+     discussion du 2026-07-29) plutôt que de les inventer ad-hoc, et
+     éventuellement ajouter un champ `code_coicop` à `categorie_produit`
+     pour la traçabilité/crédibilité du référentiel.
+  **Proposition concrète, par ordre de rentabilité** : (a) brancher Open
+  Beauty Facts et Open Pet Food Facts en premier (effort minimal, gain
+  immédiat et direct sur 2 catégories déjà existantes) ; (b) s'appuyer sur
+  la nomenclature COICOP pour définir les sous-catégories manquantes
+  identifiées le 2026-07-29 (stockage/informatique, électroménager
+  froid/hors-froid...) ; (c) brancher Open Products Facts en anticipation,
+  malgré sa faible couverture actuelle.
 
 ### 7.11 Import Open Food Facts (`imports/off_import.py`)
 - **Le vrai téléchargement n'a jamais été testé** — les domaines OFF
@@ -583,9 +682,9 @@ pour les tests `test_off_import.py`, et `tesseract-ocr-fra` installé
 (`apt-get install -y tesseract-ocr-fra`) pour les tests OCR en français,
 notamment `test_qualite.py`.
 
-**Au 2026-07-29 : 211 tests, tous passants (2 skips intentionnels)** —
-voir section 3 pour l'historique des 4 anomalies trouvées et corrigées à
-cette date, dont certaines nécessitent un upload GitHub non encore fait.
+**Au 2026-08-02 : 226 tests, tous passants (2 skips intentionnels)** —
+voir section 3 pour l'historique complet des lots trouvés/corrigés depuis
+le 2026-07-29, dont certains nécessitent un upload GitHub non encore fait.
 
 ---
 
@@ -617,7 +716,7 @@ cette date, dont certaines nécessitent un upload GitHub non encore fait.
 
 ## 11. Rappel des chiffres clés (au 29/07/2026)
 
-- **211 tests unitaires**, tous passants (2 skips intentionnels — voir
+- **226 tests unitaires**, tous passants (2 skips intentionnels — voir
   section 3 pour l'historique des corrections de cette date).
 - **44 prélèvements** définis en base, **32 catégories produit**, **17
   paramètres de référence** versionnés (12 + 5 nouveaux paramètres QF
