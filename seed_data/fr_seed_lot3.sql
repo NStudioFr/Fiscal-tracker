@@ -313,8 +313,24 @@ SELECT rp.id, 181917, NULL,   0.45
 FROM regle_prelevement rp JOIN prelevement p ON p.id = rp.prelevement_id WHERE p.code = 'IR_BAREME';
 
 -- =========================================================================
--- TICPE — essence SP95-E5 et gazole (taux national, hors majoration régionale)
+-- TICPE — essence SP95-E5 et gazole
 -- =========================================================================
+-- MISE À JOUR DU 2026-08-02 (PROJECT_STATE.md section 7.4) : la
+-- "majoration régionale" mentionnée ci-dessous comme non gérée n'existe
+-- PLUS DU TOUT depuis le 1er janvier 2026 — ce n'est donc plus une
+-- limite, mais un fait historique. Confirmé par lecture directe de la
+-- source officielle impots.gouv.fr (page "Accise sur les produits
+-- pétroliers (ex-TICPE)", modifiée le 11/02/2026) : "À la suite de
+-- l'alignement des tarifs régionaux (suppression de la majoration prévue
+-- à l'article L.312-39 et de la modulation de l'article L.312-40 du
+-- CIBS)... le tarif forfaitaire pondéré n'est plus applicable à partir
+-- du 1er janvier 2026." Les tableaux de remboursement transporteurs/taxis
+-- de cette même page confirment concrètement l'alignement : les tarifs
+-- "Île-de-France" et "Autres régions" (auparavant différents) sont
+-- désormais IDENTIQUES à partir de 2026. Les 2 taux nationaux ci-dessous
+-- sont donc désormais le taux UNIQUE et COMPLET, sans exception régionale
+-- à modéliser (hors Corse et DROM, dont les régimes spécifiques restent
+-- hors périmètre de ce lot, non demandés).
 INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
 SELECT 'FR', id, 'TICPE_SANS_PLOMB', 'TICPE essence SP95-E5', 'Fuel excise duty - unleaded petrol', 'Impuesto especial sobre hidrocarburos - gasolina',
        'Volume en litres', 'Art. 265 du code des douanes — taux national 2026'
@@ -327,14 +343,14 @@ FROM typologie_prelevement WHERE code = 'TAXE_ECO';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference, commentaire)
 SELECT id, '2026-01-01', NULL, 'montant_par_unite', 0.6829, 'L',
-       'Art. 265 du code des douanes, taux national 2026 (source concordante : FIPECO, DGEC)',
-       'Taux national hors majoration régionale (les régions peuvent moduler ce taux dans une limite encadrée, non gérée dans ce lot)'
+       'Art. 265 du code des douanes, taux national 2026 (source concordante : FIPECO, DGEC) — confirmé taux UNIQUE (plus de majoration régionale) le 2026-08-02',
+       'Taux unique, valable dans toutes les régions depuis le 01/01/2026 (majoration régionale supprimée — voir commentaire de section)'
 FROM prelevement WHERE code = 'TICPE_SANS_PLOMB';
 
 INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference, commentaire)
 SELECT id, '2026-01-01', NULL, 'montant_par_unite', 0.5940, 'L',
-       'Art. 265 du code des douanes, taux national 2026 (source concordante : FIPECO, DGEC)',
-       'Taux national hors majoration régionale (les régions peuvent moduler ce taux dans une limite encadrée, non gérée dans ce lot)'
+       'Art. 265 du code des douanes, taux national 2026 (source concordante : FIPECO, DGEC) — confirmé taux UNIQUE (plus de majoration régionale) le 2026-08-02',
+       'Taux unique, valable dans toutes les régions depuis le 01/01/2026 (majoration régionale supprimée — voir commentaire de section)'
 FROM prelevement WHERE code = 'TICPE_GAZOLE';
 
 -- =========================================================================
@@ -657,73 +673,70 @@ FROM prelevement WHERE code = 'PS_CAPITAL_ASSURANCE_VIE';
 -- différentes, d'où le paramètre valeur_seuil distinct de montant dans
 -- calculer_montant().
 --
--- SOURCING (vérifié le 2026-07-29) : seuils RFR 2026 confirmés par la
--- source officielle « L'Assurance Retraite » (CNAV, gestionnaire du régime
--- général), page "Prélèvements sociaux en 2026 : augmentation des seuils",
--- mise à jour le 09/01/2026 :
+-- SOURCING (vérifié le 2026-07-29, ÉTENDU le 2026-08-02) : seuils RFR 2026
+-- confirmés par la source officielle « L'Assurance Retraite » (CNAV,
+-- gestionnaire du régime général), page "Prélèvements sociaux en 2026 :
+-- augmentation des seuils", mise à jour le 09/01/2026 :
 -- https://www.lassuranceretraite.fr/portail-info/hors-menu/actualites-nationales/retraite/2026/prelevements-sociaux-2025.html
 -- Une divergence a été trouvée par rapport à une version antérieure de ce
 -- fichier : le seuil médian/normal à 2 parts était fixé à 39 886 € (valeur
 -- 2025, non revalorisée) au lieu de 40 604 € (valeur 2026 officielle,
 -- +1,8% conforme à la revalorisation annoncée). Corrigé le 2026-07-29.
--- Tous les autres seuils (1 part et 2 parts) concordaient déjà avec la
--- source officielle et n'ont pas été modifiés.
 --
--- LIMITE RÉSIDUELLE : la source officielle documente aussi le mécanisme de
--- "lissage" (un franchissement de seuil pendant une seule année ne fait pas
--- changer de tranche pour le taux réduit -> médian ; en revanche AUCUN
--- lissage n'existe pour le passage médian -> normal). Ce lissage n'est
--- toujours PAS implémenté par ce module (voir fiscal_engine/retraite.py) :
--- le taux appliqué correspond strictement au RFR fourni, sans mémoire des
--- années précédentes. L'utilisateur reste invité à vérifier son propre taux
--- sur son avis d'imposition ou son espace personnel lassuranceretraite.fr.
+-- REFONTE DU 2026-08-02 : le mécanisme est passé d'une table discrète par
+-- nombre de parts (1 et 2 uniquement) à un calcul par extrapolation
+-- (seuils 1 part + incrément fixe par demi-part supplémentaire), qui gère
+-- désormais N'IMPORTE QUEL nombre de parts multiple de 0,5 (>= 1). Les 3
+-- valeurs d'incrément (3484€/4555€/7066€) proviennent de capretraite.fr
+-- ("chaque demi-part supplémentaire au-delà de 3 parts ajoute...") — leur
+-- fiabilité a été confirmée par COHÉRENCE ARITHMÉTIQUE avec nos propres
+-- seuils 1 part et 2 parts (déjà vérifiés en direct sur CNAV) : la
+-- différence entre le seuil 2 parts et le seuil 1 part est EXACTEMENT
+-- égale à 2 x l'incrément annoncé, pour les 3 seuils (exo : 20016-13048=
+-- 6968=2x3484 ; réduit : 26167-17057=9110=2x4555 ; normal :
+-- 40604-26472=14132=2x7066). Ce calcul de cette règle n'a donc pas été lu
+-- directement sur une page CNAV listant 1,5/2,5/3 parts, mais déduit par
+-- recoupement arithmétique d'une source secondaire avec notre propre
+-- donnée officielle déjà vérifiée — degré de confiance élevé mais pas
+-- une lecture directe. À revérifier si un cas limite (parts très élevées,
+-- ex 5+) s'avère critique en usage réel.
 --
--- PÉRIMÈTRE : seuls 1 part et 2 parts sont modélisés (les foyers avec
--- d'autres nombres de parts, ex 1,5 ou 2,5, ne sont pas couverts — la
--- source officielle donne pourtant des seuils précis pour 1,5 / 2,5 / 3
--- parts et par demi-part supplémentaire, qui pourraient être ajoutés dans
--- une prochaine itération).
-INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
-SELECT 'FR', id, 'CSG_RETRAITE_1PART', 'CSG sur pension de retraite (foyer à 1 part)', 'CSG on retirement pension (1 tax share household)', 'CSG sobre pensión de jubilación (hogar de 1 parte)',
-       'Taux sélectionné selon le RFR du foyer, appliqué à la pension brute', 'Art. L136-8 CSS — seuils confirmés par L''Assurance Retraite (CNAV), officiel'
-FROM typologie_prelevement WHERE code = 'COTIS_SOC';
+-- LISSAGE : désormais géré par fiscal_engine/retraite.py (paramètre
+-- optionnel revenu_fiscal_reference_n_moins_3). Portée exacte confirmée
+-- sur CNAV : protège seulement le passage réduit (3,8%) -> tranche
+-- supérieure, pas le passage médian -> normal, ni (non confirmé
+-- explicitement, limite résiduelle) le passage exonéré -> réduit.
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'CSG_RETRAITE_SEUIL_EXONERE_1PART', 'Seuil RFR d''exonération de CSG sur pension de retraite (foyer à 1 part)', 'RFR exemption threshold for CSG on retirement pensions (1-share household)', 'Umbral de RFR de exención de CSG sobre pensión de jubilación (hogar de 1 parte)');
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'CSG_RETRAITE_SEUIL_REDUIT_1PART', 'Seuil RFR du taux réduit (3,8%) de CSG sur pension de retraite (foyer à 1 part)', 'RFR threshold for the reduced CSG rate (3.8%) on retirement pensions (1-share household)', 'Umbral de RFR del tipo reducido (3,8%) de CSG sobre pensión de jubilación (hogar de 1 parte)');
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'CSG_RETRAITE_SEUIL_NORMAL_1PART', 'Seuil RFR du taux normal (8,3%) de CSG sur pension de retraite (foyer à 1 part)', 'RFR threshold for the standard CSG rate (8.3%) on retirement pensions (1-share household)', 'Umbral de RFR del tipo normal (8,3%) de CSG sobre pensión de jubilación (hogar de 1 parte)');
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'CSG_RETRAITE_INCREMENT_DEMI_PART_EXONERE', 'Incrément du seuil d''exonération de CSG retraite par demi-part supplémentaire', 'CSG retirement exemption threshold increment per additional half-share', 'Incremento del umbral de exención de CSG por media parte adicional');
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'CSG_RETRAITE_INCREMENT_DEMI_PART_REDUIT', 'Incrément du seuil taux réduit de CSG retraite par demi-part supplémentaire', 'CSG retirement reduced-rate threshold increment per additional half-share', 'Incremento del umbral del tipo reducido de CSG por media parte adicional');
+INSERT INTO parametre_reference (pays_code, code, libelle_fr, libelle_en, libelle_es)
+VALUES ('FR', 'CSG_RETRAITE_INCREMENT_DEMI_PART_NORMAL', 'Incrément du seuil taux normal de CSG retraite par demi-part supplémentaire', 'CSG retirement standard-rate threshold increment per additional half-share', 'Incremento del umbral del tipo normal de CSG por media parte adicional');
 
-INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
-SELECT 'FR', id, 'CSG_RETRAITE_2PARTS', 'CSG sur pension de retraite (foyer à 2 parts)', 'CSG on retirement pension (2 tax shares household)', 'CSG sobre pensión de jubilación (hogar de 2 partes)',
-       'Taux sélectionné selon le RFR du foyer, appliqué à la pension brute', 'Art. L136-8 CSS — seuils confirmés par L''Assurance Retraite (CNAV), officiel'
-FROM typologie_prelevement WHERE code = 'COTIS_SOC';
-
-INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, source_reference, commentaire)
-SELECT id, '2026-01-01', NULL, 'bareme_a_seuil',
-       'Art. L136-8 CSS — seuils 2026 confirmés par L''Assurance Retraite (CNAV), tableau officiel mis à jour le 09/01/2026, +1,8% de revalorisation 2026',
-       'Seuils RFR 2024 (avis d''imposition 2025), pour une pension versée en 2026, foyer à 1 part'
-FROM prelevement WHERE code = 'CSG_RETRAITE_1PART';
-
-INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, source_reference, commentaire)
-SELECT id, '2026-01-01', NULL, 'bareme_a_seuil',
-       'Art. L136-8 CSS — seuils 2026 confirmés par L''Assurance Retraite (CNAV), tableau officiel mis à jour le 09/01/2026, +1,8% de revalorisation 2026',
-       'Seuils RFR 2024 (avis d''imposition 2025), pour une pension versée en 2026, foyer à 2 parts'
-FROM prelevement WHERE code = 'CSG_RETRAITE_2PARTS';
-
--- Tranches 1 part : exonération / réduit 3,8% / médian 6,6% / normal 8,3%
-INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
-SELECT rp.id, 0, 13048, 0.000 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_1PART';
-INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
-SELECT rp.id, 13048, 17057, 0.038 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_1PART';
-INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
-SELECT rp.id, 17057, 26472, 0.066 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_1PART';
-INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
-SELECT rp.id, 26472, NULL, 0.083 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_1PART';
-
--- Tranches 2 parts
-INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
-SELECT rp.id, 0, 20016, 0.000 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
-INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
-SELECT rp.id, 20016, 26167, 0.038 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
-INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
-SELECT rp.id, 26167, 40604, 0.066 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
-INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux)
-SELECT rp.id, 40604, NULL, 0.083 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='CSG_RETRAITE_2PARTS';
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 13048.0, 'L''Assurance Retraite (CNAV), tableau officiel du 09/01/2026 — lu directement le 2026-07-29'
+FROM parametre_reference WHERE code = 'CSG_RETRAITE_SEUIL_EXONERE_1PART';
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 17057.0, 'L''Assurance Retraite (CNAV), tableau officiel du 09/01/2026 — lu directement le 2026-07-29'
+FROM parametre_reference WHERE code = 'CSG_RETRAITE_SEUIL_REDUIT_1PART';
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 26472.0, 'L''Assurance Retraite (CNAV), tableau officiel du 09/01/2026 — lu directement le 2026-07-29'
+FROM parametre_reference WHERE code = 'CSG_RETRAITE_SEUIL_NORMAL_1PART';
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 3484.0, 'capretraite.fr — cohérence arithmétique confirmée avec les seuils 1/2 parts officiels CNAV (voir commentaire ci-dessus), vérifié le 2026-08-02'
+FROM parametre_reference WHERE code = 'CSG_RETRAITE_INCREMENT_DEMI_PART_EXONERE';
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 4555.0, 'capretraite.fr — cohérence arithmétique confirmée avec les seuils 1/2 parts officiels CNAV (voir commentaire ci-dessus), vérifié le 2026-08-02'
+FROM parametre_reference WHERE code = 'CSG_RETRAITE_INCREMENT_DEMI_PART_REDUIT';
+INSERT INTO valeur_parametre_reference (parametre_id, date_debut, date_fin, valeur, source_reference)
+SELECT id, '2026-01-01', NULL, 7066.0, 'capretraite.fr — cohérence arithmétique confirmée avec les seuils 1/2 parts officiels CNAV (voir commentaire ci-dessus), vérifié le 2026-08-02'
+FROM parametre_reference WHERE code = 'CSG_RETRAITE_INCREMENT_DEMI_PART_NORMAL';
 
 -- CRDS retraite : 0,5%, due dès que le taux de CSG > 0% (donc pas en cas
 -- d'exonération). CASA retraite : 0,3%, due uniquement aux taux médian et
