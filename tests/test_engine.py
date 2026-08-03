@@ -275,29 +275,12 @@ def _inserer_donnees_de_base(conn: sqlite3.Connection) -> dict:
         (id_regle_seuil,),
     )
 
-    # Prélèvements de test pour fiscal_engine.retraite (valeurs rondes de
-    # test, PAS les vrais seuils 2026 — voir seed_data pour les vraies valeurs).
-    conn.execute(
-        """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
-           VALUES ('FR', ?, 'CSG_RETRAITE_1PART', 'CSG retraite test 1 part', 'Test')""",
-        (id_typo_ir,),
-    )
-    id_csg_retraite_1part = conn.execute(
-        "SELECT id FROM prelevement WHERE code = 'CSG_RETRAITE_1PART'"
-    ).fetchone()["id"]
-    conn.execute(
-        """INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, source_reference)
-           VALUES (?, '2026-01-01', NULL, 'bareme_a_seuil', 'Test')""",
-        (id_csg_retraite_1part,),
-    )
-    id_regle_csg_retraite = conn.execute(
-        "SELECT id FROM regle_prelevement WHERE prelevement_id = ?", (id_csg_retraite_1part,)
-    ).fetchone()["id"]
-    for borne_min, borne_max, taux in [(0, 1000, 0.0), (1000, 2000, 0.038), (2000, 3000, 0.066), (3000, None, 0.083)]:
-        conn.execute(
-            "INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, taux) VALUES (?, ?, ?, ?)",
-            (id_regle_csg_retraite, borne_min, borne_max, taux),
-        )
+    # NOTE (2026-08-02) : la fixture de test pour fiscal_engine.retraite a
+    # été retirée d'ici — ce module n'utilise plus le mécanisme générique
+    # 'bareme_a_seuil' (voir fiscal_engine/retraite.py, refonte du
+    # 2026-08-02 pour gérer un nombre de parts arbitraire + le lissage).
+    # Les tests de fiscal_engine.retraite vivent désormais exclusivement
+    # dans tests/test_retraite.py, sur les vraies données du seed.
 
     conn.execute(
         """INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, reference_legale)
@@ -811,50 +794,11 @@ class TestBaremeASeuil(unittest.TestCase):
             calculator.calculer_montant(self.conn, regle, montant=1000.0, valeur_seuil=-50.0)
 
 
-class TestRetraite(unittest.TestCase):
-    def setUp(self):
-        self.conn = _creer_bdd_test()
-        self.ids = _inserer_donnees_de_base(self.conn)
-
-    def test_taux_exonere_aucun_prelevement(self):
-        r = retraite.calculer_prelevements_retraite(
-            self.conn, nombre_parts=1, revenu_fiscal_reference=500.0, pension_brute=1500.0, date_reference="2026-06-01"
-        )
-        self.assertAlmostEqual(r["taux_csg"], 0.0)
-        self.assertAlmostEqual(r["montant_crds"], 0.0)
-        self.assertAlmostEqual(r["montant_casa"], 0.0)
-        self.assertAlmostEqual(r["pension_nette"], 1500.0)
-
-    def test_taux_reduit_crds_due_casa_exoneree(self):
-        r = retraite.calculer_prelevements_retraite(
-            self.conn, nombre_parts=1, revenu_fiscal_reference=1500.0, pension_brute=1000.0, date_reference="2026-06-01"
-        )
-        self.assertAlmostEqual(r["taux_csg"], 0.038)
-        self.assertAlmostEqual(r["montant_crds"], 5.0)  # 1000 * 0.005
-        self.assertAlmostEqual(r["montant_casa"], 0.0)  # PAS due au taux reduit
-
-    def test_taux_median_crds_et_casa_dues(self):
-        r = retraite.calculer_prelevements_retraite(
-            self.conn, nombre_parts=1, revenu_fiscal_reference=2500.0, pension_brute=1000.0, date_reference="2026-06-01"
-        )
-        self.assertAlmostEqual(r["taux_csg"], 0.066)
-        self.assertAlmostEqual(r["montant_crds"], 5.0)
-        self.assertAlmostEqual(r["montant_casa"], 3.0)  # 1000 * 0.003
-
-    def test_taux_normal_crds_et_casa_dues(self):
-        r = retraite.calculer_prelevements_retraite(
-            self.conn, nombre_parts=1, revenu_fiscal_reference=5000.0, pension_brute=1000.0, date_reference="2026-06-01"
-        )
-        self.assertAlmostEqual(r["taux_csg"], 0.083)
-        self.assertAlmostEqual(r["montant_casa"], 3.0)
-        self.assertAlmostEqual(r["total_preleve"], 83.0 + 5.0 + 3.0)
-
-    def test_nombre_parts_non_gere_leve_exception(self):
-        with self.assertRaises(ValueError):
-            retraite.calculer_prelevements_retraite(
-                self.conn, nombre_parts=3, revenu_fiscal_reference=5000.0, pension_brute=1000.0, date_reference="2026-06-01"
-            )
-
+# NOTE (2026-08-02) : la classe TestRetraite (tests génériques du
+# mécanisme bareme_a_seuil appliqué à fiscal_engine.retraite) a été
+# retirée d'ici — devenue obsolète suite à la refonte de retraite.py, qui
+# n'utilise plus ce mécanisme générique. Voir tests/test_retraite.py pour
+# la couverture de fiscal_engine.retraite (sur les vraies données du seed).
 
 class TestMontantParUniteASeuil(unittest.TestCase):
     def setUp(self):
