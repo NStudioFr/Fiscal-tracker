@@ -214,7 +214,13 @@ CREATE TABLE produit_reference (
     id                      INTEGER PRIMARY KEY,
     code_barre              TEXT UNIQUE,
     nom                     TEXT,
-    source                  TEXT CHECK (source IN ('OFF', 'OPF', 'manuel')),
+    source                  TEXT CHECK (source IN ('OFF', 'OBF', 'OPFF', 'OPF', 'manuel')),
+                                                 -- OFF=Open Food Facts, OBF=Open Beauty Facts,
+                                                 -- OPFF=Open Pet Food Facts (voir imports/off_import.py,
+                                                 -- étendu le 2026-08-02 — PROJECT_STATE.md section 7.10).
+                                                 -- OPF=Open Products Facts, réservé pour une future
+                                                 -- intégration (pas encore implémentée, couverture France
+                                                 -- jugée trop faible au 2026-08-02).
     categorie_produit_id    INTEGER REFERENCES categorie_produit(id),
     -- Données nutritionnelles minimales nécessaires au calcul des taxes sur
     -- les boissons sucrées/édulcorées (voir TAXE_BOISSONS_SUCRE et
