@@ -106,6 +106,53 @@ SELECT 'MEUBLES', 'Meubles', 'Furniture', 'Muebles', id FROM type_depense WHERE 
 INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
 SELECT 'INFORMATIQUE_MULTIMEDIA', 'Informatique et multimédia', 'IT and multimedia equipment', 'Informática y multimedia', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
 
+-- Sous-catégories fines ajoutées le 2026-08-02 (PROJECT_STATE.md section
+-- 7.10) pour permettre le calcul de l'éco-participation DEEE (voir
+-- ECO_PART_* dans seed_data/fr_seed_lot3.sql), qui varie fortement par
+-- type d'équipement précis (jusqu'à x30 entre un réfrigérateur et une
+-- bouilloire) — un mapping au niveau "ELECTROMENAGER"/"INFORMATIQUE_MULTIMEDIA"
+-- seul ne le permettrait pas. Sous-ensemble REPRÉSENTATIF (17 catégories)
+-- des 8 familles du barème officiel Ecologic 2026, PAS une couverture
+-- exhaustive des ~150 lignes du barème réel — voir PROJECT_STATE.md
+-- section 7.8 pour le détail de ce qui est/n'est pas couvert. Les
+-- catégories ELECTROMENAGER/INFORMATIQUE_MULTIMEDIA ci-dessus restent le
+-- filet de sécurité (TVA seule) pour tout ce qui n'entre pas dans ces
+-- sous-catégories.
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'ELECTROMENAGER_REFRIGERATEUR_CONGELATEUR', 'Réfrigérateur, congélateur ou cave à vin', 'Refrigerator, freezer or wine cabinet', 'Frigorífico, congelador o vinoteca', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'ELECTROMENAGER_LAVE_LINGE', 'Lave-linge ou lave-linge séchant', 'Washing machine or washer-dryer', 'Lavadora o lavadora-secadora', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'ELECTROMENAGER_SECHE_LINGE', 'Sèche-linge', 'Tumble dryer', 'Secadora', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'ELECTROMENAGER_LAVE_VAISSELLE', 'Lave-vaisselle', 'Dishwasher', 'Lavavajillas', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'ELECTROMENAGER_CUISINIERE', 'Cuisinière', 'Cooker/range', 'Cocina', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'ELECTROMENAGER_FOUR_MICRO_ONDES', 'Four micro-ondes', 'Microwave oven', 'Horno microondas', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'ELECTROMENAGER_ASPIRATEUR', 'Aspirateur', 'Vacuum cleaner', 'Aspiradora', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'ELECTROMENAGER_BOUILLOIRE', 'Bouilloire', 'Kettle', 'Hervidor', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'ELECTROMENAGER_CAFETIERE', 'Cafetière (avec filtre)', 'Filter coffee maker', 'Cafetera de filtro', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'ELECTROMENAGER_FER_A_REPASSER', 'Fer à repasser', 'Iron', 'Plancha', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'ELECTROMENAGER_SOIN_PERSONNEL', 'Équipement de soin personnel (sèche-cheveux, rasoir, tondeuse, lisseur...)', 'Personal care appliance (hairdryer, shaver, trimmer, straightener...)', 'Aparato de cuidado personal (secador, afeitadora, cortapelo, plancha de pelo...)', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'EGP_TELEVISEUR', 'Téléviseur', 'Television set', 'Televisor', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'INFORMATIQUE_SMARTPHONE', 'Téléphone portable (smartphone)', 'Mobile phone (smartphone)', 'Teléfono móvil (smartphone)', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'INFORMATIQUE_ORDINATEUR_PORTABLE', 'Ordinateur portable', 'Laptop computer', 'Ordenador portátil', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'INFORMATIQUE_ORDINATEUR_FIXE', 'Ordinateur fixe', 'Desktop computer', 'Ordenador de sobremesa', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'INFORMATIQUE_TABLETTE', 'Tablette', 'Tablet', 'Tableta', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
+SELECT 'INFORMATIQUE_IMPRIMANTE', 'Imprimante ou multifonction', 'Printer or multifunction device', 'Impresora o multifunción', id FROM type_depense WHERE code = 'EQUIPEMENT_MAISON';
+
 INSERT INTO categorie_produit (code, libelle_fr, libelle_en, libelle_es, type_depense_id)
 SELECT 'PRODUITS_ENTRETIEN_MENAGER', 'Produits d''entretien ménager', 'Household cleaning products', 'Productos de limpieza del hogar', id FROM type_depense WHERE code = 'HYGIENE_ENTRETIEN';
 
@@ -183,8 +230,53 @@ INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
 SELECT cp.id, p.id FROM categorie_produit cp, prelevement p
 WHERE cp.code IN ('BOISSONS_SUCREES', 'BOISSONS_ALCOOLISEES', 'ALIMENTATION_ANIMAUX',
                    'VETEMENTS', 'CHAUSSURES', 'ELECTROMENAGER', 'MEUBLES', 'INFORMATIQUE_MULTIMEDIA',
-                   'PRODUITS_ENTRETIEN_MENAGER', 'PRODUITS_HYGIENE_BEAUTE', 'JOUETS', 'FOURNITURES_SCOLAIRES')
+                   'PRODUITS_ENTRETIEN_MENAGER', 'PRODUITS_HYGIENE_BEAUTE', 'JOUETS', 'FOURNITURES_SCOLAIRES',
+                   'ELECTROMENAGER_REFRIGERATEUR_CONGELATEUR', 'ELECTROMENAGER_LAVE_LINGE',
+                   'ELECTROMENAGER_SECHE_LINGE', 'ELECTROMENAGER_LAVE_VAISSELLE', 'ELECTROMENAGER_CUISINIERE',
+                   'ELECTROMENAGER_FOUR_MICRO_ONDES', 'ELECTROMENAGER_ASPIRATEUR', 'ELECTROMENAGER_BOUILLOIRE',
+                   'ELECTROMENAGER_CAFETIERE', 'ELECTROMENAGER_FER_A_REPASSER', 'ELECTROMENAGER_SOIN_PERSONNEL',
+                   'EGP_TELEVISEUR', 'INFORMATIQUE_SMARTPHONE', 'INFORMATIQUE_ORDINATEUR_PORTABLE',
+                   'INFORMATIQUE_ORDINATEUR_FIXE', 'INFORMATIQUE_TABLETTE', 'INFORMATIQUE_IMPRIMANTE')
   AND p.code = 'TVA_NORMAL';
+
+-- Rattachement des 17 catégories d'électroménager/informatique fines à
+-- leur éco-participation DEEE spécifique (1:1, voir seed_data/fr_seed_lot3.sql
+-- pour la définition des ECO_PART_*) — ajouté le 2026-08-02
+-- (PROJECT_STATE.md sections 7.8/7.10).
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'ELECTROMENAGER_REFRIGERATEUR_CONGELATEUR' AND p.code = 'ECO_PART_REFRIGERATEUR_CONGELATEUR';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'ELECTROMENAGER_LAVE_LINGE' AND p.code = 'ECO_PART_LAVE_LINGE';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'ELECTROMENAGER_SECHE_LINGE' AND p.code = 'ECO_PART_SECHE_LINGE';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'ELECTROMENAGER_LAVE_VAISSELLE' AND p.code = 'ECO_PART_LAVE_VAISSELLE';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'ELECTROMENAGER_CUISINIERE' AND p.code = 'ECO_PART_CUISINIERE';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'ELECTROMENAGER_FOUR_MICRO_ONDES' AND p.code = 'ECO_PART_FOUR_MICRO_ONDES';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'ELECTROMENAGER_ASPIRATEUR' AND p.code = 'ECO_PART_ASPIRATEUR';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'ELECTROMENAGER_BOUILLOIRE' AND p.code = 'ECO_PART_BOUILLOIRE';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'ELECTROMENAGER_CAFETIERE' AND p.code = 'ECO_PART_CAFETIERE';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'ELECTROMENAGER_FER_A_REPASSER' AND p.code = 'ECO_PART_FER_A_REPASSER';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'ELECTROMENAGER_SOIN_PERSONNEL' AND p.code = 'ECO_PART_SOIN_PERSONNEL';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'EGP_TELEVISEUR' AND p.code = 'ECO_PART_TELEVISEUR';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'INFORMATIQUE_SMARTPHONE' AND p.code = 'ECO_PART_SMARTPHONE';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'INFORMATIQUE_ORDINATEUR_PORTABLE' AND p.code = 'ECO_PART_ORDINATEUR_PORTABLE';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'INFORMATIQUE_ORDINATEUR_FIXE' AND p.code = 'ECO_PART_ORDINATEUR_FIXE';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'INFORMATIQUE_TABLETTE' AND p.code = 'ECO_PART_TABLETTE';
+INSERT INTO categorie_prelevement (categorie_produit_id, prelevement_id)
+SELECT cp.id, p.id FROM categorie_produit cp, prelevement p WHERE cp.code = 'INFORMATIQUE_IMPRIMANTE' AND p.code = 'ECO_PART_IMPRIMANTE';
 
 -- Rattachement des 2 taxes soda (voir seed_data/fr_seed_lot3.sql pour leur
 -- définition) à BOISSONS_SUCREES — AJOUTÉ le 2026-07-29, fiabilisation
