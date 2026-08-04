@@ -167,30 +167,69 @@ recloné à neuf, 143 tests passants à l'époque) :
     comme non résolue. Alerte ajoutée : nouvelle fonction
     `orchestrator.diagnostiquer_taxes_non_calculees` (6 nouveaux tests).
 13. Voir section 7.10 pour les nouvelles sources de mapping produits
-    proposées (recherche menée, pas encore intégrée — en attente de choix
-    utilisateur).
+    proposées à ce moment (recherche menée, implémentation faite dans la
+    foulée en lot 8, voir ci-dessous).
 
 Suite complète passée de 211 à 226 tests.
 
+**Lot 8 (2026-08-02, suite) — ⚠️ PAS ENCORE UPLOADÉ sur GitHub** :
+
+14. **Mapping produits étendu (7.10)** : implémentation de la proposition
+    du lot 7 — `imports/off_import.py` couvre désormais 3 sources (Open
+    Food Facts, Open Beauty Facts, Open Pet Food Facts) au lieu d'une
+    seule. Voir section 7.10 pour le détail. Contrainte `CHECK` de
+    `produit_reference.source` étendue dans `schema/schema.sql`. Nouveau
+    fichier `tests/test_beauty_petfood_import.py` (13 tests) et 2
+    nouvelles fixtures synthétiques (`tests/fixtures/obf_echantillon_synthetique.parquet`,
+    `tests/fixtures/opff_echantillon_synthetique.csv.gz`).
+
+Suite complète passée de 226 à 239 tests.
+
+**Lot 9 (2026-08-02, suite et fin) — ⚠️ PAS ENCORE UPLOADÉ sur GitHub** :
+
+15. **Comparaison COICOP vs Ecologic (7.10)** : recherche concrète menée
+    à la demande de l'utilisateur — résultat négatif pour COICOP comme
+    plan directeur (trop grossière, regroupement différent), voir section
+    7.10. Le barème Ecologic officiel a été sourcé et utilisé directement.
+16. **Éco-participation DEEE électroménager/informatique (7.8)** :
+    implémentation d'un sous-ensemble représentatif de 17 équipements
+    (sur les 8 familles officielles, 4 non couvertes) — voir section 7.8
+    pour le détail complet et les limites assumées (tarif de base sans
+    critères de modulation, ~150 lignes du barème réel non toutes
+    couvertes). Nouveau fichier `tests/test_eco_participation.py` (28
+    tests). `orchestrator.py::diagnostiquer_taxes_non_calculees`
+    généralisé (le message était câblé spécifiquement pour la "teneur en
+    sucre").
+
+Suite complète passée de 239 à 267 tests.
+
 **Fichiers modifiés/créés localement à uploader sur GitHub pour les lots 3
-à 7** (l'environnement Claude ne peut cloner/lire le repo, pas y pousser de
+à 9** (l'environnement Claude ne peut cloner/lire le repo, pas y pousser de
 commits — ces lots n'ont pas encore été vérifiés par un reclonage depuis la
 dernière confirmation d'upload, lot 2) :
 - `fiscal_engine/orchestrator.py` (modifié — résolution de valeur_seuil +
-  fonction d'alerte `diagnostiquer_taxes_non_calculees`)
+  fonction d'alerte `diagnostiquer_taxes_non_calculees`, généralisée)
 - `fiscal_engine/alcool.py` (modifié — 4 nouveaux points gérés)
 - `fiscal_engine/independant.py` (modifié — CIPAV, plafonds CA, éligibilité VL)
 - `fiscal_engine/retraite.py` (réécrit — parts arbitraires + lissage)
-- `seed_data/fr_categories_produits.sql` (modifié — rattachement taxe soda)
+- `imports/off_import.py` (réécrit — 3 sources : OFF/OBF/OPFF)
+- `schema/schema.sql` (modifié — contrainte CHECK produit_reference.source étendue)
+- `seed_data/fr_categories_produits.sql` (modifié — rattachement taxe soda
+  + 17 nouvelles catégories électroménager/informatique + rattachement
+  éco-participation)
 - `seed_data/fr_seed_lot3.sql` (modifié — commentaires taxe soda + 6
   nouveaux prélèvements alcool + 2 nouvelles catégories tabac + CIPAV +
   plafonds CA + seuil RFR versement libératoire + refonte seuils CSG
-  retraite + commentaire TICPE)
+  retraite + commentaire TICPE + 17 prélèvements ECO_PART_*)
 - `tests/test_taxe_soda.py` (modifié — 6 nouveaux tests d'alerte)
 - `tests/test_alcool.py` (modifié — 14 nouveaux tests)
 - `tests/test_tabac.py` (nouveau)
 - `tests/test_independant.py` (nouveau)
 - `tests/test_retraite.py` (réécrit)
+- `tests/test_beauty_petfood_import.py` (nouveau)
+- `tests/test_eco_participation.py` (nouveau)
+- `tests/fixtures/obf_echantillon_synthetique.parquet` (nouveau, binaire)
+- `tests/fixtures/opff_echantillon_synthetique.csv.gz` (nouveau, binaire)
 - `tests/test_engine.py` (modifié — retrait de la fixture et de la classe
   TestRetraite, devenues obsolètes)
 - `PROJECT_STATE.md` (ce document, mis à jour)
@@ -233,13 +272,15 @@ Fiscal-tracker/
 │   └── ticket_caisse.py            — Parser ticket de caisse
 ├── imports/                      — Import de sources de données externes
 │   └── off_import.py              — Import Open Food Facts
-├── tests/                        — 226 tests au total (tous passants,
+├── tests/                        — 267 tests au total (tous passants,
 │                                    2 skips intentionnels — voir section 3)
 │   ├── test_engine.py
 │   ├── test_alcool.py
 │   ├── test_retraite.py            — Vraies données seed (pas de mécanisme générique) : ajouté le 2026-07-29
 │   ├── test_foyer.py               — Idem, pour foyer.py (garde alternée, invalidité...) : ajouté le 2026-07-29
 │   ├── test_taxe_soda.py           — Idem, orchestrateur + taxe soda : ajouté le 2026-07-29
+│   ├── test_beauty_petfood_import.py — Idem, import OBF/OPFF : ajouté le 2026-08-02
+│   ├── test_eco_participation.py   — Idem, éco-participation DEEE : ajouté le 2026-08-02
 │   ├── test_fiche_paie_parser.py
 │   ├── test_avis_imposition_parser.py
 │   ├── test_facture_parser.py
@@ -542,11 +583,59 @@ n'importe quelle formule sans modification du schéma.
   ticket), mais ne peut pas vérifier ou prédire ce prix lui-même.
 
 ### 7.8 Éco-contributions (DEEE, textile, mobilier...)
-- **Non traitées du tout.** Réelles, mais gérées par des éco-organismes
-  semi-privés (Ecologic, ecosystem, Citeo...) avec des barèmes techniques
-  détaillés par catégorie/poids/matériau — pas un taux national simple.
-  Nécessiterait un import dédié de grande ampleur, comparable à celui
-  d'OFF. Piste explicitement laissée pour un lot futur si besoin confirmé.
+- **✅ Partiellement traitée le 2026-08-02 pour le DEEE électroménager/
+  informatique** (PROJECT_STATE.md section 7.10 pour le contexte de cette
+  décision). Source EXCLUSIVEMENT officielle : "Barème Éco-contributions -
+  Équipements Électriques et Électroniques Ménagers - Version 2 -
+  Applicable à partir du 1er janvier 2026", récupéré en intégralité
+  (texte complet, tous codes et tarifs) par lecture directe sur
+  ecologic-france.com le 2026-08-02 :
+  https://www.ecologic-france.com/images/medias/document/28556/Ecologic-Bareme-EEE-Menager-2026-FR-VF.pdf
+  - **17 nouvelles catégories fines** ajoutées à `categorie_produit`
+    (`ELECTROMENAGER_REFRIGERATEUR_CONGELATEUR`, `ELECTROMENAGER_LAVE_LINGE`,
+    `EGP_TELEVISEUR`, `INFORMATIQUE_SMARTPHONE`, etc. — voir
+    `seed_data/fr_categories_produits.sql` pour la liste complète), chacune
+    rattachée à la fois à `TVA_NORMAL` et à son `ECO_PART_*` spécifique.
+  - **3 équipements à tarif dépendant du poids/de la taille**
+    (réfrigérateur/congélateur, téléviseur, imprimante) utilisent le
+    mécanisme `montant_par_unite_a_seuil` déjà existant (le même que pour
+    la taxe soda) — `valeur_seuil` = poids en kg ou taille en pouces, à
+    fournir explicitement par l'appelant (pas déductible d'un ticket de
+    caisse standard, et aucune source ouverte de type OFF ne documente
+    cette donnée par référence produit à ce jour).
+  - **14 équipements à tarif fixe** (lave-linge, smartphone, ordinateur
+    portable, bouilloire, etc.).
+  - Verrouillé par le nouveau fichier `tests/test_eco_participation.py`
+    (28 tests).
+  - `orchestrator.py::diagnostiquer_taxes_non_calculees` généralisé pour
+    couvrir aussi ces nouveaux prélèvements (le message d'avertissement
+    était auparavant câblé spécifiquement pour la "teneur en sucre" —
+    inapproprié pour un réfrigérateur ; corrigé avec une branche générique).
+- **Couverture volontairement PARTIELLE, à connaître avant tout usage
+  critique** :
+  1. **17 équipements représentatifs sur les ~150 lignes du barème réel**
+     (une ligne par combinaison précise équipement x tranche de poids/
+     taille) — PAS une couverture exhaustive.
+  2. **4 des 8 familles officielles non couvertes DU TOUT** : Sport &
+     mobilité électrique, Jouet/console de jeux & équipement de loisirs,
+     Bricolage/jardinage/électricité/domotique, Génie thermique &
+     climatique.
+  3. **6 critères de modulation NON gérés** (batterie non séparable, gaz
+     HFC, retardateurs de flamme bromés, usage unique, % de plastique
+     recyclé, indice de réparabilité) : le tarif retenu est systématiquement
+     le tarif DE BASE (sans aucun critère), qui est explicitement le tarif
+     "en cas de doute" selon la notice officielle — conservateur par
+     construction sur la plupart des lignes, mais pas garanti exact.
+  4. **Textile (Refashion) et mobilier (Eco-mobilier)** : toujours NON
+     traités, cette session n'a couvert que le DEEE (Ecologic/Ecosystem).
+- Comparaison COICOP vs Ecologic menée le 2026-08-02 (voir section 7.10
+  pour le contexte) : confirme que la nomenclature COICOP de l'INSEE est
+  bien plus grossière que celle d'Ecologic (2 classes fourre-tout pour
+  tout l'électroménager) et regroupe différemment (informatique dispersé
+  entre 2 divisions COICOP distinctes, 08.2 et 09.1.3, alors qu'Ecologic
+  n'en fait qu'une seule famille IT) — COICOP n'a donc PAS été utilisée
+  comme source de la nomenclature retenue ici, seul le barème Ecologic
+  officiel l'a été.
 
 ### 7.9 Autres impôts non couverts (jamais recherchés)
 - Impôt sur les sociétés (hors périmètre : particuliers/indépendants
@@ -556,6 +645,13 @@ n'importe quelle formule sans modification du schéma.
 - Droits de mutation/succession, droits d'enregistrement.
 - Malus écologique sur les véhicules.
 - Toute fiscalité professionnelle au-delà du régime micro-entrepreneur.
+- Rémunération pour copie privée (RCP, "taxe copie privée" sur les supports
+  de stockage) — discutée le 2026-07-29 dans le même contexte que les
+  éco-contributions, mais son mécanisme (barème par capacité de stockage
+  en Go, donnée par-produit) nécessiterait soit une source de données
+  produit non identifiée à ce jour, soit une saisie manuelle par
+  l'utilisateur — non traitée cette session, laissée pour un lot futur si
+  besoin confirmé.
 
 ### 7.10 Mapping produits (`fr_categories_produits.sql`)
 - 32 catégories seulement, niveau "famille" — pas un référentiel produit
@@ -569,44 +665,58 @@ n'importe quelle formule sans modification du schéma.
   au fil de l'usage réel (un produit sans tag correspondant est importé
   mais reste sans catégorie, donc sans prélèvement calculable
   automatiquement).
-- **Recherche de sources complémentaires menée le 2026-08-02 (PAS ENCORE
-  intégrée — proposition en attente de décision utilisateur)** :
-  1. **Open Beauty Facts** (openbeautyfacts.org) : base sœur d'OFF, MÊME
-     infrastructure (API, format d'export DuckDB/JSONL, licence ODbL),
-     dédiée aux cosmétiques/soins personnels — correspondance directe avec
-     la catégorie `PRODUITS_HYGIENE_BEAUTE`. ~13 000+ produits. Le module
-     `imports/off_import.py` existant pourrait être adapté avec un effort
-     minimal (même structure de champs).
-  2. **Open Pet Food Facts** (openpetfoodfacts.org) : idem, dédiée à
-     l'alimentation animale — correspondance directe avec
-     `ALIMENTATION_ANIMAUX`. Même infrastructure/licence.
-  3. **Open Products Facts** (openproductsfacts.org) : base sœur "tout le
-     reste" (non alimentaire, non cosmétique) — pertinente pour
-     électroménager/informatique/textile/etc., mais ENCORE TRÈS PETITE en
-     pratique (quelques dizaines à centaines de produits observés en
-     France lors de cette recherche) : ne résoudrait pas le manque de
-     sous-catégories fines à elle seule aujourd'hui, mais coûte peu à
-     brancher (même infra) et grossira avec le temps — investissement à
-     faible coût, bénéfice différé.
-  4. **Nomenclature COICOP de l'INSEE** (insee.fr/fr/metadonnees/coicop2016)
-     : PAS une base de produits, mais la classification officielle
-     (européenne/internationale) de la consommation des ménages, utilisée
-     par l'INSEE pour l'IPC et l'enquête "Budget des familles". Contient
-     déjà des sous-catégories officielles précises qui manquent à notre
-     `categorie_produit` (ex : 09.3.4.2.1 "Produits pour animaux
-     domestiques" séparé des services vétérinaires 09.3.5). Proposition :
-     s'en servir comme PLAN DIRECTEUR pour choisir de nouvelles
-     sous-catégories (électroménager/informatique notamment, voir
-     discussion du 2026-07-29) plutôt que de les inventer ad-hoc, et
-     éventuellement ajouter un champ `code_coicop` à `categorie_produit`
-     pour la traçabilité/crédibilité du référentiel.
-  **Proposition concrète, par ordre de rentabilité** : (a) brancher Open
-  Beauty Facts et Open Pet Food Facts en premier (effort minimal, gain
-  immédiat et direct sur 2 catégories déjà existantes) ; (b) s'appuyer sur
-  la nomenclature COICOP pour définir les sous-catégories manquantes
-  identifiées le 2026-07-29 (stockage/informatique, électroménager
-  froid/hors-froid...) ; (c) brancher Open Products Facts en anticipation,
-  malgré sa faible couverture actuelle.
+- **✅ Sources complémentaires — Open Beauty Facts et Open Pet Food Facts
+  intégrées le 2026-08-02** (proposition faite le même jour, implémentée
+  dans la foulée) : `imports/off_import.py` couvre désormais 3 sources au
+  lieu d'une seule.
+  - **Open Beauty Facts (OBF)** : `telecharger_dump_beauty` /
+    `filtrer_produits_beauty_france` / `importer_beauty_dans_bdd` — dump
+    Parquet (même dépôt HuggingFace qu'OFF, fichier `beauty.parquet`,
+    ~42 Mo), mappé sur `PRODUITS_HYGIENE_BEAUTE`
+    (`MAPPING_CATEGORIES_OBF`, 10 tags). Aucune donnée nutritionnelle
+    importée (non pertinente pour un cosmétique).
+  - **Open Pet Food Facts (OPFF)** : `telecharger_dump_petfood` /
+    `filtrer_produits_petfood_france` / `importer_petfood_dans_bdd` — pas
+    de dump Parquet disponible pour cette base à ce jour, import via
+    CSV/TSV gzippé (DuckDB `read_csv`) à la place, mappé sur
+    `ALIMENTATION_ANIMAUX` (`MAPPING_CATEGORIES_OPFF`, 8 tags).
+  - CLI étendue : `python3 -m imports.off_import --source {food,beauty,petfood} ...`.
+  - `_resoudre_categorie_produit` généralisée pour accepter n'importe quel
+    mapping en paramètre (au lieu d'être câblée en dur sur OFF).
+  - Contrainte `CHECK` de `produit_reference.source` étendue
+    (`schema/schema.sql`) : `'OFF', 'OBF', 'OPFF', 'OPF', 'manuel'` (`OPF`
+    = Open Products Facts, réservé pour une future intégration, voir
+    ci-dessous).
+  - Verrouillé par le nouveau fichier `tests/test_beauty_petfood_import.py`
+    (13 tests, échantillons synthétiques `tests/fixtures/obf_echantillon_synthetique.parquet`
+    et `tests/fixtures/opff_echantillon_synthetique.csv.gz`).
+  - **Même limite que pour OFF** (voir docstring du module) : accès réseau
+    restreint dans cet environnement, `telecharger_dump_beauty`/
+    `telecharger_dump_petfood` n'ont pas pu être testées avec un vrai
+    téléchargement — et pour OBF/OPFF spécifiquement, le nom des colonnes
+    supposées (`code`, `product_name`, `categories_tags`,
+    `countries_tags`) est une hypothèse par analogie avec le schéma OFF
+    (même plateforme technique, Product Opener), PAS confirmée sur un
+    vrai fichier — à vérifier par l'utilisateur au premier usage réel.
+- **Pas encore fait (restant de la proposition du 2026-08-02)** :
+  1. **Open Products Facts** : toujours pas intégré, couverture France
+     jugée trop faible pour justifier l'effort à ce stade (voir recherche
+     du 2026-08-02) — le nom `OPF` est réservé dans le schéma pour une
+     intégration future.
+  2. **Nomenclature COICOP de l'INSEE comme plan directeur : recherche
+     menée le 2026-08-02, résultat négatif** — comparaison concrète entre
+     COICOP (division 05.3 pour l'électroménager, divisions 08.2/09.1.3
+     pour l'informatique/téléphonie) et le barème Ecologic officiel :
+     COICOP s'est avérée BEAUCOUP plus grossière (2 classes fourre-tout
+     pour tout l'électroménager, contre des dizaines de codes précis chez
+     Ecologic) et regroupe différemment (l'informatique et la téléphonie
+     sont dispersées entre 2 divisions COICOP distinctes, alors
+     qu'Ecologic n'en fait qu'une seule famille "IT"). COICOP n'a donc
+     PAS été utilisée pour définir les 17 sous-catégories créées le
+     2026-08-02 (voir section 7.8) — le barème Ecologic officiel a été
+     sourcé et utilisé directement, sans détour par COICOP. Aucun champ
+     `code_coicop` n'a été ajouté à `categorie_produit` (jugé sans valeur
+     ajoutée réelle vu cet écart de granularité et de regroupement).
 
 ### 7.11 Import Open Food Facts (`imports/off_import.py`)
 - **Le vrai téléchargement n'a jamais été testé** — les domaines OFF
@@ -682,7 +792,7 @@ pour les tests `test_off_import.py`, et `tesseract-ocr-fra` installé
 (`apt-get install -y tesseract-ocr-fra`) pour les tests OCR en français,
 notamment `test_qualite.py`.
 
-**Au 2026-08-02 : 226 tests, tous passants (2 skips intentionnels)** —
+**Au 2026-08-02 : 267 tests, tous passants (2 skips intentionnels)** —
 voir section 3 pour l'historique complet des lots trouvés/corrigés depuis
 le 2026-07-29, dont certains nécessitent un upload GitHub non encore fait.
 
@@ -716,7 +826,7 @@ le 2026-07-29, dont certains nécessitent un upload GitHub non encore fait.
 
 ## 11. Rappel des chiffres clés (au 29/07/2026)
 
-- **226 tests unitaires**, tous passants (2 skips intentionnels — voir
+- **267 tests unitaires**, tous passants (2 skips intentionnels — voir
   section 3 pour l'historique des corrections de cette date).
 - **44 prélèvements** définis en base, **32 catégories produit**, **17
   paramètres de référence** versionnés (12 + 5 nouveaux paramètres QF
