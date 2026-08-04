@@ -88,6 +88,11 @@ def _message_avertissement_valeur_seuil_manquante(conn: sqlite3.Connection, lign
     """Construit un message d'avertissement humain-lisible expliquant
     pourquoi un prélèvement de type 'montant_par_unite_a_seuil' n'a pas pu
     être calculé pour cette ligne (voir _resoudre_valeur_seuil_produit).
+
+    Généralisé le 2026-08-02 (PROJECT_STATE.md section 7.8) pour couvrir
+    aussi les prélèvements ECO_PART_* (poids/taille d'un équipement), en
+    plus des 2 taxes soda (teneur en sucre) d'origine — voir la branche
+    générique en fin de fonction.
     """
     code_prelevement = conn.execute(
         "SELECT code, libelle_fr FROM prelevement WHERE id = ?", (prelevement_id,)
@@ -102,19 +107,33 @@ def _message_avertissement_valeur_seuil_manquante(conn: sqlite3.Connection, lign
             f"manuelle nécessaire si ce produit est concerné."
         )
 
-    if ligne["produit_reference_id"] is None:
+    if code_prelevement["code"] == "TAXE_BOISSONS_SUCRE":
+        if ligne["produit_reference_id"] is None:
+            return (
+                f"{code_prelevement['libelle_fr']} : non calculée — cette ligne n'est reliée à "
+                f"aucun produit identifié (produit_reference_id absent), impossible de "
+                f"connaître sa teneur en sucre. Un rapprochement avec Open Food Facts "
+                f"(ou une saisie manuelle de la teneur) permettrait de la calculer."
+            )
         return (
-            f"{code_prelevement['libelle_fr']} : non calculée — cette ligne n'est reliée à "
-            f"aucun produit identifié (produit_reference_id absent), impossible de "
-            f"connaître sa teneur en sucre. Un rapprochement avec Open Food Facts "
-            f"(ou une saisie manuelle de la teneur) permettrait de la calculer."
+            f"{code_prelevement['libelle_fr']} : non calculée — le produit identifié sur cette "
+            f"ligne n'a pas de teneur en sucre connue (teneur_sucre_100g absente dans "
+            f"produit_reference). Complétez cette donnée (ex : correction sur Open Food "
+            f"Facts) pour permettre le calcul."
         )
 
+    # Cas générique : tout autre prélèvement 'montant_par_unite_a_seuil' non
+    # spécifiquement prévu ci-dessus — notamment les éco-participations
+    # ECO_PART_* (poids ou taille d'un équipement), qui ne dépendent PAS
+    # d'un produit_reference identifié via un import type OFF (aucune base
+    # ouverte connue ne documente le poids/la taille par référence produit
+    # à ce jour) mais d'une valeur à saisir explicitement par l'appelant
+    # via valeur_seuil lors du calcul direct (voir fiscal_engine/calculator.calculer_montant).
     return (
-        f"{code_prelevement['libelle_fr']} : non calculée — le produit identifié sur cette "
-        f"ligne n'a pas de teneur en sucre connue (teneur_sucre_100g absente dans "
-        f"produit_reference). Complétez cette donnée (ex : correction sur Open Food "
-        f"Facts) pour permettre le calcul."
+        f"{code_prelevement['libelle_fr']} : non calculée automatiquement — ce prélèvement "
+        f"dépend d'une caractéristique du produit (ex : poids, taille) non déductible "
+        f"d'une simple identification produit dans ce projet. À calculer explicitement "
+        f"en fournissant cette valeur (valeur_seuil) via fiscal_engine.calculator."
     )
 
 
