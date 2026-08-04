@@ -1170,5 +1170,202 @@ SELECT id, '2026-01-01', NULL, 'formule', 'quantite * (seuil/100) * 11000',
 FROM prelevement WHERE code = 'TAXE_PREMIX_AUTRE';
 
 -- =========================================================================
+-- Éco-participation DEEE (Équipements Électriques et Électroniques)
+-- =========================================================================
+-- Ajouté le 2026-08-02 (PROJECT_STATE.md sections 7.8/7.10), suite à la
+-- discussion du 2026-07-29 sur le besoin de sous-catégories fines en
+-- électroménager/informatique. Source EXCLUSIVEMENT officielle : "Barème
+-- Éco-contributions - Équipements Électriques et Électroniques Ménagers -
+-- Version 2 - Applicable à partir du 1er janvier 2026", récupéré en
+-- intégralité (texte complet, tous codes et tarifs) par lecture directe
+-- sur ecologic-france.com le 2026-08-02.
+-- https://www.ecologic-france.com/images/medias/document/28556/Ecologic-Bareme-EEE-Menager-2026-FR-VF.pdf
+--
+-- COUVERTURE PARTIELLE ASSUMÉE : le barème officiel comporte ~150 lignes
+-- (un code par combinaison précise équipement x tranche de poids/taille),
+-- réparties en 8 familles (GEM, PEM, EGP, IT, Sport & mobilité électrique,
+-- Jouet/loisirs, Bricolage/jardinage/domotique, Génie thermique &
+-- climatique). Ce lot couvre un SOUS-ENSEMBLE REPRÉSENTATIF de 17
+-- équipements parmi les plus couramment achetés par un ménage (across GEM
+-- froid/linge/cuisine, EGP télé, IT, PEM courant) — PAS les 8 familles
+-- en entier, ni les familles Sport & mobilité électrique, Jouet/loisirs,
+-- Bricolage/jardinage/domotique et Génie thermique & climatique (aucun
+-- équipement de ces 4 familles n'est couvert à ce stade). Voir
+-- PROJECT_STATE.md section 7.8 pour la liste complète de ce qui est/n'est
+-- pas couvert, et pour un plan d'extension si besoin.
+--
+-- CRITÈRES DE MODULATION NON GÉRÉS (assumé, voir discussion du
+-- 2026-07-29) : le barème officiel ajoute jusqu'à 6 critères de
+-- modulation par ligne (batterie non séparable, présence de gaz HFC, RFB
+-- dans le plastique, usage unique, % de plastique recyclé, indice de
+-- réparabilité), qui font varier le montant final À LA HAUSSE OU À LA
+-- BAISSE pour un MÊME équipement. Aucun de ces critères n'est modélisé :
+-- le tarif retenu ici est le tarif DE BASE (sans aucun critère de
+-- modulation), qui est explicitement, selon la notice officielle du
+-- barème, le tarif à appliquer "en cas de doute" ("l'éco-contribution la
+-- moins favorable doit être appliquée" en l'absence de justificatif) —
+-- ce choix est donc conservateur par construction pour la plupart des
+-- lignes (le tarif de base est presque toujours le plus bas), mais PAS
+-- garanti exact pour un produit précis.
+--
+-- MÉCANISME : équipements à tarif fixe -> 'montant_par_unite' (comme
+-- pour l'accise sur les produits intermédiaires). Équipements à tarif
+-- dépendant du poids ou de la taille -> 'montant_par_unite_a_seuil'
+-- (même mécanisme que la taxe sur les boissons sucrées, valeur_seuil =
+-- poids en kg ou taille en pouces selon le cas — à fournir par
+-- l'appelant, pas déductible d'un simple ticket de caisse standard).
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_REFRIGERATEUR_CONGELATEUR', 'Éco-participation DEEE - réfrigérateur, congélateur ou cave à vin', 'WEEE eco-contribution - refrigerator, freezer or wine cabinet', 'Ecocontribución RAEE - frigorífico, congelador o vinoteca',
+       'Montant fixe par unité, selon tranche de poids (kg)', 'Barème Ecologic EEE Ménagers 2026 (GEM froid), code MFRIG'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, unite, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite_a_seuil', 'unite',
+       'Barème Ecologic EEE Ménagers 2026, codes MFRIG010000/020000/030000 — lecture directe du barème le 2026-08-02',
+       'valeur_seuil = poids en kg ; quantite = nombre d''unités'
+FROM prelevement WHERE code = 'ECO_PART_REFRIGERATEUR_CONGELATEUR';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 0, 40, 12.23 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='ECO_PART_REFRIGERATEUR_CONGELATEUR';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 40, 80, 20.20 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='ECO_PART_REFRIGERATEUR_CONGELATEUR';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 80, NULL, 25.17 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='ECO_PART_REFRIGERATEUR_CONGELATEUR';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_TELEVISEUR', 'Éco-participation DEEE - téléviseur', 'WEEE eco-contribution - television set', 'Ecocontribución RAEE - televisor',
+       'Montant fixe par unité, selon tranche de taille d''écran (pouces)', 'Barème Ecologic EEE Ménagers 2026 (EGP), code MTELE'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, unite, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite_a_seuil', 'unite',
+       'Barème Ecologic EEE Ménagers 2026, codes MTELE010000/020000/030000 — lecture directe du barème le 2026-08-02',
+       'valeur_seuil = taille d''écran en pouces ; quantite = nombre d''unités'
+FROM prelevement WHERE code = 'ECO_PART_TELEVISEUR';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 0, 32, 5.08 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='ECO_PART_TELEVISEUR';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 32, 50, 9.26 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='ECO_PART_TELEVISEUR';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 50, NULL, 12.65 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='ECO_PART_TELEVISEUR';
+
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_IMPRIMANTE', 'Éco-participation DEEE - imprimante ou multifonction', 'WEEE eco-contribution - printer or multifunction device', 'Ecocontribución RAEE - impresora o multifunción',
+       'Montant fixe par unité, selon tranche de poids (kg)', 'Barème Ecologic EEE Ménagers 2026 (IT), code MPRIN'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, unite, source_reference, commentaire)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite_a_seuil', 'unite',
+       'Barème Ecologic EEE Ménagers 2026, codes MPRIN010000/020000/030000 — lecture directe du barème le 2026-08-02',
+       'valeur_seuil = poids en kg ; quantite = nombre d''unités'
+FROM prelevement WHERE code = 'ECO_PART_IMPRIMANTE';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 0, 5, 0.86 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='ECO_PART_IMPRIMANTE';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 5, 10, 1.21 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='ECO_PART_IMPRIMANTE';
+INSERT INTO tranche_bareme (regle_id, borne_min, borne_max, montant_unitaire)
+SELECT rp.id, 10, NULL, 2.15 FROM regle_prelevement rp JOIN prelevement p ON p.id=rp.prelevement_id WHERE p.code='ECO_PART_IMPRIMANTE';
+
+-- Équipements à tarif fixe (14) — un seul code officiel retenu par
+-- équipement (le tarif "de base", sans option/variante — voir Cuisinière,
+-- Lave-linge : le barème distingue top/hublot/séchant, tous au même tarif
+-- de base 12,85€, donc un seul code suffit ici).
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_LAVE_LINGE', 'Éco-participation DEEE - lave-linge', 'WEEE eco-contribution - washing machine', 'Ecocontribución RAEE - lavadora',
+       'Montant fixe par unité', 'Barème Ecologic EEE Ménagers 2026 (GEM linge), codes MLVLT/MLVLH/MLVLS'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_SECHE_LINGE', 'Éco-participation DEEE - sèche-linge', 'WEEE eco-contribution - tumble dryer', 'Ecocontribución RAEE - secadora',
+       'Montant fixe par unité', 'Barème Ecologic EEE Ménagers 2026 (GEM linge), code MSLIN'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_LAVE_VAISSELLE', 'Éco-participation DEEE - lave-vaisselle', 'WEEE eco-contribution - dishwasher', 'Ecocontribución RAEE - lavavajillas',
+       'Montant fixe par unité', 'Barème Ecologic EEE Ménagers 2026 (GEM cuisine), code MLVVA'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_CUISINIERE', 'Éco-participation DEEE - cuisinière', 'WEEE eco-contribution - cooker/range', 'Ecocontribución RAEE - cocina',
+       'Montant fixe par unité', 'Barème Ecologic EEE Ménagers 2026 (GEM cuisine), code MCUIS'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_FOUR_MICRO_ONDES', 'Éco-participation DEEE - four micro-ondes', 'WEEE eco-contribution - microwave oven', 'Ecocontribución RAEE - horno microondas',
+       'Montant fixe par unité', 'Barème Ecologic EEE Ménagers 2026 (GEM cuisine), code MONDE'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_ASPIRATEUR', 'Éco-participation DEEE - aspirateur', 'WEEE eco-contribution - vacuum cleaner', 'Ecocontribución RAEE - aspiradora',
+       'Montant fixe par unité (tarif de base aspirateur traîneau/balai filaire)', 'Barème Ecologic EEE Ménagers 2026 (PEM entretien maison), code MASTF'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_BOUILLOIRE', 'Éco-participation DEEE - bouilloire', 'WEEE eco-contribution - kettle', 'Ecocontribución RAEE - hervidor',
+       'Montant fixe par unité', 'Barème Ecologic EEE Ménagers 2026 (PEM petit-déjeuner), code MBOUI'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_CAFETIERE', 'Éco-participation DEEE - cafetière (avec filtre)', 'WEEE eco-contribution - filter coffee maker', 'Ecocontribución RAEE - cafetera de filtro',
+       'Montant fixe par unité', 'Barème Ecologic EEE Ménagers 2026 (PEM petit-déjeuner), code MCAFF'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_FER_A_REPASSER', 'Éco-participation DEEE - fer à repasser', 'WEEE eco-contribution - iron', 'Ecocontribución RAEE - plancha',
+       'Montant fixe par unité', 'Barème Ecologic EEE Ménagers 2026 (PEM entretien maison), code MFERR'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_SOIN_PERSONNEL', 'Éco-participation DEEE - équipement de soin personnel', 'WEEE eco-contribution - personal care appliance', 'Ecocontribución RAEE - aparato de cuidado personal',
+       'Montant fixe par unité (tarif de base, hors option batterie non séparable)', 'Barème Ecologic EEE Ménagers 2026 (PEM beauté bien-être), code MEQSP'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_SMARTPHONE', 'Éco-participation DEEE - téléphone portable (smartphone)', 'WEEE eco-contribution - mobile phone (smartphone)', 'Ecocontribución RAEE - teléfono móvil (smartphone)',
+       'Montant fixe par unité (identique neuf/reconditionné selon le barème)', 'Barème Ecologic EEE Ménagers 2026 (IT téléphonie), code MCELL'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_ORDINATEUR_PORTABLE', 'Éco-participation DEEE - ordinateur portable', 'WEEE eco-contribution - laptop computer', 'Ecocontribución RAEE - ordenador portátil',
+       'Montant fixe par unité (identique neuf/reconditionné selon le barème)', 'Barème Ecologic EEE Ménagers 2026 (IT ordinateur et tablette), code MLAPT'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_ORDINATEUR_FIXE', 'Éco-participation DEEE - ordinateur fixe', 'WEEE eco-contribution - desktop computer', 'Ecocontribución RAEE - ordenador de sobremesa',
+       'Montant fixe par unité', 'Barème Ecologic EEE Ménagers 2026 (IT ordinateur et tablette), code MCOMP'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+INSERT INTO prelevement (pays_code, typologie_id, code, libelle_fr, libelle_en, libelle_es, base_calcul_desc, reference_legale)
+SELECT 'FR', id, 'ECO_PART_TABLETTE', 'Éco-participation DEEE - tablette', 'WEEE eco-contribution - tablet', 'Ecocontribución RAEE - tableta',
+       'Montant fixe par unité', 'Barème Ecologic EEE Ménagers 2026 (IT ordinateur et tablette), code MTABL'
+FROM typologie_prelevement WHERE code = 'TAXE_ECO';
+
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 12.85, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_LAVE_LINGE';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 12.85, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_SECHE_LINGE';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 12.85, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_LAVE_VAISSELLE';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 12.20, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_CUISINIERE';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 3.17, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_FOUR_MICRO_ONDES';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 1.45, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_ASPIRATEUR';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 0.34, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_BOUILLOIRE';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 0.46, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_CAFETIERE';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 0.30, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_FER_A_REPASSER';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 0.10, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_SOIN_PERSONNEL';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 2.56, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_SMARTPHONE';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 3.32, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_ORDINATEUR_PORTABLE';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 2.52, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_ORDINATEUR_FIXE';
+INSERT INTO regle_prelevement (prelevement_id, date_debut, date_fin, type_regle, montant_unitaire, unite, source_reference)
+SELECT id, '2026-01-01', NULL, 'montant_par_unite', 0.85, 'unite', 'Barème Ecologic EEE Ménagers 2026 — lecture directe le 2026-08-02'
+FROM prelevement WHERE code = 'ECO_PART_TABLETTE';
+
+-- =========================================================================
 -- Fin du contenu fiscal — Lot 3
 -- =========================================================================
